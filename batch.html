@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AIP/AIC Batch Summarizer Workspace</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --text-color: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #10b981;
+      --error: #ef4444;
+      --border-color: #334155;
+      --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: var(--font-family);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      box-sizing: border-box;
+    }
+
+    .navbar {
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border-color);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .navbar h1 {
+      font-size: 20px;
+      margin: 0;
+      background: linear-gradient(135deg, #60a5fa, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-weight: 700;
+    }
+
+    .navbar-actions {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--text-muted);
+    }
+
+    .workspace {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 450px;
+      border-right: 1px solid var(--border-color);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      background: #0f172a;
+      overflow-y: auto;
+    }
+
+    .main-content {
+      flex: 1;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      background: #090d16;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-color);
+    }
+
+    #emailInput {
+      width: 100%;
+      height: 200px;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background-color: #1e293b;
+      color: var(--text-color);
+      box-sizing: border-box;
+      font-size: 13px;
+      font-family: inherit;
+      overflow-y: auto;
+      outline: none;
+    }
+
+    #emailInput:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+    }
+
+    #emailInput:empty:before {
+      content: attr(placeholder);
+      color: var(--text-muted);
+      cursor: text;
+    }
+
+    #emailInput:disabled, #emailInput[disabled] {
+      background-color: var(--border-color);
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .btn-primary:disabled {
+      background-color: var(--border-color);
+      color: var(--text-muted);
+      cursor: not-allowed;
+    }
+
+    .queue-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 200px;
+    }
+
+    .queue-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 8px;
+    }
+
+    .queue-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .queue-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+    }
+
+    .queue-item {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .queue-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .queue-item-url {
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 320px;
+      color: #93c5fd;
+    }
+
+    .status-badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .status-pending { background: #334155; color: #cbd5e1; }
+    .status-active { background: #1e3a8a; color: #93c5fd; animation: pulse 1.5s infinite; }
+    .status-completed { background: #064e3b; color: #6ee7b7; }
+    .status-failed { background: #7f1d1d; color: #fca5a5; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      color: var(--text-muted);
+      gap: 16px;
+    }
+
+    .empty-state h3 {
+      margin: 0;
+      font-size: 18px;
+      color: var(--text-color);
+    }
+
+    .summaries-list {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .summary-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .summary-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+
+    .summary-card-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #93c5fd;
+      word-break: break-all;
+    }
+
+    .summary-card-body {
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .summary-card-body h2, .summary-card-body h3 {
+      color: #60a5fa;
+      font-size: 15px;
+      margin-top: 16px;
+      margin-bottom: 8px;
+    }
+
+    .summary-card-body ul {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+
+    .summary-card-body li {
+      margin-bottom: 6px;
+    }
+
+    .summary-card-body strong {
+      color: #34d399;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+    }
+  </style>
+  <script src="pdf.min.js"></script>
+</head>
+<body>
+  <div class="navbar">
+    <h1>AIP/AIC Batch Summarizer</h1>
+    <div class="navbar-actions">
+      <button id="exportAllBtn" class="btn-secondary" disabled>Export All (Markdown)</button>
+      <button id="settingsBtn" class="btn-secondary">Settings</button>
+    </div>
+  </div>
+
+  <div class="workspace">
+    <div class="sidebar">
+      <div class="form-group">
+        <label for="emailInput">Paste Email Content or PDF URL list:</label>
+        <div id="emailInput" contenteditable="true" placeholder="Paste the text containing AIP SUP/AIC PDF URLs here..."></div>
+      </div>
+
+      <button id="processBtn" class="btn-primary">
+        <span>Process Documents</span>
+      </button>
+
+      <div class="queue-section">
+        <div class="queue-header">
+          <span class="queue-title">Document Queue</span>
+          <span id="queueCount" style="font-size: 12px; color: var(--text-muted);">0 items</span>
+        </div>
+        <div id="queueList" class="queue-list">
+          <!-- Queue items generated dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div id="emptyState" class="empty-state">
+        <h3>No documents processed yet</h3>
+        <p>Paste text containing PDF URLs on the left sidebar and click "Process Documents" to start.</p>
+      </div>
+      <div id="summariesContainer" class="summaries-list" style="display: none;">
+        <!-- Summaries cards generated dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <script src="batch.js"></script>
+</body>
+</html>

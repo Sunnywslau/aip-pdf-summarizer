@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AIP/AIC Summarizer</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --text-color: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #10b981;
+      --error: #ef4444;
+      --border-color: #334155;
+      --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: var(--font-family);
+      margin: 0;
+      padding: 16px;
+      width: 400px;
+      box-sizing: border-box;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 18px;
+      margin: 0;
+      background: linear-gradient(135deg, #60a5fa, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-weight: 700;
+    }
+
+    .options-link {
+      color: var(--primary);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      transition: color 0.2s;
+      cursor: pointer;
+    }
+
+    .options-link:hover {
+      color: var(--primary-hover);
+      text-decoration: underline;
+    }
+
+    .url-display {
+      font-size: 12px;
+      color: var(--text-muted);
+      background: #0f172a;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 16px;
+    }
+
+    .btn {
+      width: 100%;
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .btn:active {
+      transform: scale(0.99);
+    }
+
+    .btn:disabled {
+      background-color: var(--border-color);
+      color: var(--text-muted);
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .status-container {
+      margin-top: 16px;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      background: rgba(30, 41, 59, 0.5);
+      border-radius: 8px;
+      border: 1px dashed var(--border-color);
+    }
+
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      border-top-color: var(--primary);
+      animation: spin 1s ease-in-out infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .status-text {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .result-container {
+      margin-top: 16px;
+      display: none;
+      max-height: 350px;
+      overflow-y: auto;
+      padding: 16px;
+      background: var(--card-bg);
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .result-container h2, .result-container h3 {
+      color: #60a5fa;
+      margin-top: 12px;
+      margin-bottom: 8px;
+      font-size: 14px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 4px;
+    }
+
+    .result-container ul {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+
+    .result-container li {
+      margin-bottom: 6px;
+    }
+
+    .result-container strong {
+      color: #34d399;
+    }
+
+    .error-container {
+      display: none;
+      margin-top: 16px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid var(--error);
+      color: #fca5a5;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+
+    /* Scrollbar Styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-muted);
+    }
+  </style>
+  <script src="pdf.min.js"></script>
+</head>
+<body>
+  <div class="header">
+    <h1>AIP/AIC Summarizer</h1>
+    <a id="optionsLink" class="options-link">Settings</a>
+  </div>
+
+  <div id="urlDisplay" class="url-display">Detecting document...</div>
+
+  <button id="summarizeBtn" class="btn" disabled>
+    <span>Summarize Document</span>
+  </button>
+
+  <button id="batchBtn" class="btn" style="margin-top: 8px; background-color: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color);">
+    <span>Open Batch Processor</span>
+  </button>
+
+  <div id="statusContainer" class="status-container">
+    <div class="spinner"></div>
+    <div id="statusText" class="status-text">Preparing...</div>
+  </div>
+
+  <div id="errorContainer" class="error-container"></div>
+
+  <div id="resultContainer" class="result-container"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
