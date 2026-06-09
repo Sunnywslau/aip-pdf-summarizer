@@ -134,6 +134,7 @@
       <label for="provider">LLM Provider</label>
       <select id="provider">
         <option value="deepseek">DeepSeek (Recommended for HK - Direct Access)</option>
+        <option value="github">GitHub Models (Workaround for Corporate Firewalls)</option>
         <option value="gemini">Google Gemini</option>
       </select>
     </div>
@@ -141,6 +142,11 @@
     <div class="form-group" id="deepseekKeyGroup">
       <label for="deepseekApiKey">DeepSeek API Key</label>
       <input type="password" id="deepseekApiKey" placeholder="Enter your DeepSeek API Key...">
+    </div>
+
+    <div class="form-group" id="githubKeyGroup" style="display: none;">
+      <label for="githubApiKey">GitHub Token (PAT)</label>
+      <input type="password" id="githubApiKey" placeholder="Enter your GitHub Personal Access Token...">
     </div>
 
     <div class="form-group" id="geminiKeyGroup" style="display: none;">

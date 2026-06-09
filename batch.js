@@ -63,9 +63,13 @@ document.addEventListener('DOMContentLoaded', () => {
   let summariesResults = []; // Stores { url, summaryText }
 
   function getActiveKey() {
-    return config.provider === 'gemini' 
-      ? (config.geminiApiKey || config.apiKey) 
-      : (config.deepseekApiKey || config.apiKey);
+    if (config.provider === 'gemini') {
+      return config.geminiApiKey || config.apiKey;
+    } else if (config.provider === 'github') {
+      return config.githubApiKey;
+    } else {
+      return config.deepseekApiKey || config.apiKey;
+    }
   }
 
   // Load config
@@ -74,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
       provider: 'deepseek',
       apiKey: '', // legacy
       deepseekApiKey: '',
+      githubApiKey: '',
       geminiApiKey: '',
       model: 'deepseek-v4-flash',
       customModel: '',
@@ -321,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const modelName = config.model === 'custom' ? config.customModel : config.model;
     const apiKey = provider === 'gemini'
       ? (config.geminiApiKey || config.apiKey)
-      : (config.deepseekApiKey || config.apiKey);
+      : (provider === 'github' ? config.githubApiKey : (config.deepseekApiKey || config.apiKey));
 
     if (provider === 'gemini') {
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
@@ -360,6 +365,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const data = await res.json();
       return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response content from model.';
+    } else if (provider === 'github') {
+      // GitHub Models API (OpenAI Compatible)
+      const endpoint = 'https://models.github.ai/inference/chat/completions';
+      const requestBody = {
+        model: modelName,
+        messages: [
+          { role: 'system', content: config.systemPrompt },
+          { role: 'user', content: `Analyze the following document and provide a summary:\n\n${text}` }
+        ]
+      };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'Accept': 'application/vnd.github+json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!res.ok) {
+        const errorJson = await res.json().catch(() => ({}));
+        const errorMsg = errorJson.message || `HTTP ${res.status}`;
+        throw new Error(`GitHub Models API Error: ${errorMsg}`);
+      }
+
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || 'No response content from model.';
     } else {
       // DeepSeek API (OpenAI Compatible)
       const endpoint = 'https://api.deepseek.com/chat/completions';
