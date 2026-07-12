@@ -137,13 +137,18 @@ document.addEventListener('DOMContentLoaded', () => {
     summariesResults = [];
     exportAllBtn.disabled = true;
     
-    queue = pdfUrls.map((url, index) => ({
-      id: index,
-      url: url,
-      status: 'pending', // pending, active, completed, failed
-      error: '',
-      summary: ''
-    }));
+    queue = pdfUrls.map((url, index) => {
+      const anchorEl = emailInput.querySelector(`a[href="${url}"]`);
+      const linkText = anchorEl ? anchorEl.textContent.trim() : '';
+      return {
+        id: index,
+        url: url,
+        name: linkText || getFileName(url),
+        status: 'pending', // pending, active, completed, failed
+        error: '',
+        summary: ''
+      };
+    });
 
     queueCount.textContent = `${queue.length} items`;
     emptyState.style.display = 'none';
@@ -156,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
       itemEl.id = `queue-item-${item.id}`;
       itemEl.innerHTML = `
         <div class="queue-item-header">
-          <span class="queue-item-url" title="${item.url}">${getFileName(item.url)}</span>
+          <span class="queue-item-url" title="${item.url}">${item.name}</span>
           <span class="status-badge status-pending" id="badge-${item.id}">Pending</span>
         </div>
       `;
@@ -243,18 +248,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         item.summary = summary;
-        summariesResults.push({ url: item.url, summaryText: summary });
+        summariesResults.push({ url: item.url, name: item.name, summaryText: summary });
         updateQueueItemStatus(item.id, 'completed', 'Completed');
 
         // Append to main view
-        appendSummaryCard(item.url, summary);
+        appendSummaryCard(item.url, item.name, summary);
 
       } catch (err) {
         console.error(err);
         item.status = 'failed';
         item.error = err.message || 'Error occurred';
         updateQueueItemStatus(item.id, 'failed', 'Failed');
-        appendErrorCard(item.url, item.error);
+        appendErrorCard(item.url, item.name, item.error);
       }
     }
 
@@ -275,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let mdContent = `# AIP/AIC Batch Summary Report\nGenerated on: ${new Date().toLocaleString()}\n\n---\n\n`;
     
     summariesResults.forEach(res => {
-      mdContent += `## Document: ${getFileName(res.url)}\n`;
+      mdContent += `## Document: ${res.name}\n`;
       mdContent += `**Source URL:** [Link](${res.url})\n\n`;
       mdContent += `${res.summaryText}\n\n`;
       mdContent += `---\n\n`;
@@ -311,7 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function appendSummaryCard(url, summaryMarkdown) {
+  function appendSummaryCard(url, name, summaryMarkdown) {
     const card = document.createElement('div');
     card.className = 'summary-card';
     
@@ -319,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     card.innerHTML = `
       <div class="summary-card-header">
-        <div class="summary-card-title">${getFileName(url)}</div>
+        <div class="summary-card-title">${name}</div>
         <div class="card-actions">
           <button class="btn-secondary copy-btn" style="padding: 4px 10px; font-size: 11px;">Copy</button>
           <a href="${url}" target="_blank" class="btn-secondary" style="padding: 4px 10px; font-size: 11px; text-decoration: none;">Open PDF</a>
@@ -343,13 +348,13 @@ document.addEventListener('DOMContentLoaded', () => {
     summariesContainer.appendChild(card);
   }
 
-  function appendErrorCard(url, errorMessage) {
+  function appendErrorCard(url, name, errorMessage) {
     const card = document.createElement('div');
     card.className = 'summary-card';
     card.style.borderColor = 'var(--error)';
     card.innerHTML = `
       <div class="summary-card-header" style="border-bottom-color: rgba(239, 68, 68, 0.2)">
-        <div class="summary-card-title" style="color: #fca5a5">${getFileName(url)}</div>
+        <div class="summary-card-title" style="color: #fca5a5">${name}</div>
         <div class="card-actions">
           <a href="${url}" target="_blank" class="btn-secondary" style="padding: 4px 10px; font-size: 11px; text-decoration: none;">Open PDF</a>
         </div>
