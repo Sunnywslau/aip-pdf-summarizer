@@ -19,6 +19,7 @@ const PROVIDER_MODELS = {
     { value: 'custom', text: 'Custom Model...' }
   ],
   gemini: [
+    { value: 'gemini-3.5-flash', text: 'Gemini 3.5 Flash (Recommended - State of the Art)' },
     { value: 'gemini-2.5-flash', text: 'Gemini 2.5 Flash (Recommended - Fast & Modern)' },
     { value: 'gemini-2.5-pro', text: 'Gemini 2.5 Pro (Powerful reasoning)' },
     { value: 'gemini-1.5-flash', text: 'Gemini 1.5 Flash (Legacy)' },
