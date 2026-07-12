@@ -93,6 +93,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     geminiApiKey: '',
     model: 'deepseek-v4-flash',
     customModel: '',
+    backendUrl: '',
     systemPrompt: ''
   }, (items) => {
     config = items;
@@ -144,32 +145,64 @@ document.addEventListener('DOMContentLoaded', async () => {
         throw new Error(`Failed to load document (HTTP ${response.status})`);
       }
       
-      showStatus('Parsing PDF text content...');
       const arrayBuffer = await response.arrayBuffer();
 
-      // Set worker source for PDFJS
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
-      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-      const pdf = await loadingTask.promise;
+      // Check if it is an AIP Amendment (checks URL and Title)
+      const lowerUrl = currentTabUrl.toLowerCase();
+      const lowerTitle = tab ? tab.title.toLowerCase() : '';
+      const isAmendment = lowerUrl.includes('amdt') || lowerUrl.includes('amendment') || 
+                          lowerTitle.includes('amdt') || lowerTitle.includes('amendment');
       
-      let fullText = '';
-      const maxPages = Math.min(pdf.numPages, 30); // Cap at 30 pages for performance/token limits
+      let summary = '';
       
-      for (let i = 1; i <= maxPages; i++) {
-        showStatus(`Parsing PDF text content (Page ${i} of ${pdf.numPages})...`);
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map(item => item.str).join(' ');
-        fullText += pageText + '\n';
-      }
+      if (isAmendment) {
+        showStatus('Uploading and analyzing with backend...');
+        const backendUrl = config.backendUrl || 'http://localhost:8000';
+        
+        const formData = new FormData();
+        formData.append("file", new Blob([arrayBuffer]), "document.pdf");
+        
+        const res = await fetch(`${backendUrl}/analyze`, {
+          method: 'POST',
+          headers: {
+            'X-Gemini-API-Key': getActiveKey()
+          },
+          body: formData
+        });
+        
+        if (!res.ok) {
+          const errorJson = await res.json().catch(() => ({}));
+          const errorMsg = errorJson.detail || `HTTP ${res.status}`;
+          throw new Error(`Backend Error: ${errorMsg}`);
+        }
+        
+        const data = await res.json();
+        summary = data.analysis;
+      } else {
+        // Process locally for SUP/AIC
+        showStatus('Parsing PDF text content...');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+        
+        let fullText = '';
+        const maxPages = Math.min(pdf.numPages, 30);
+        
+        for (let i = 1; i <= maxPages; i++) {
+          showStatus(`Parsing PDF text content (Page ${i} of ${pdf.numPages})...`);
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join(' ');
+          fullText += pageText + '\n';
+        }
 
-      if (!fullText.trim()) {
-        throw new Error('Could not extract any readable text from the PDF. The document might be image-only / scanned without OCR.');
-      }
+        if (!fullText.trim()) {
+          throw new Error('Could not extract any readable text from the PDF. The document might be image-only / scanned without OCR.');
+        }
 
-      // 2. Invoke LLM API
-      showStatus('Analyzing with AI...');
-      const summary = await callLLMAPI(fullText, config);
+        showStatus('Analyzing with AI...');
+        summary = await callLLMAPI(fullText, config);
+      }
 
       // 3. Show Result
       hideStatus();

@@ -82,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
       geminiApiKey: '',
       model: 'deepseek-v4-flash',
       customModel: '',
+      backendUrl: '',
       systemPrompt: ''
     }, (items) => {
       config = items;
@@ -179,28 +180,63 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const arrayBuffer = await response.arrayBuffer();
 
-        // 2. Parse PDF
-        updateQueueItemStatus(item.id, 'active', 'Parsing PDF...');
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        const pdf = await loadingTask.promise;
+        // Determine if it is an AIP Amendment based on URL and Link Text
+        const anchorEl = emailInput.querySelector(`a[href="${item.url}"]`);
+        const linkText = anchorEl ? anchorEl.textContent.toLowerCase() : '';
+        const lowerUrl = item.url.toLowerCase();
         
-        let fullText = '';
-        const maxPages = Math.min(pdf.numPages, 30);
-        for (let i = 1; i <= maxPages; i++) {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          const pageText = textContent.items.map(t => t.str).join(' ');
-          fullText += pageText + '\n';
-        }
+        const isAmendment = lowerUrl.includes('amdt') || lowerUrl.includes('amendment') || 
+                            linkText.includes('amdt') || linkText.includes('amendment');
+        
+        let summary = '';
+        
+        if (isAmendment) {
+          updateQueueItemStatus(item.id, 'active', 'Uploading to backend...');
+          const backendUrl = config.backendUrl || 'http://localhost:8000';
+          
+          const formData = new FormData();
+          formData.append("file", new Blob([arrayBuffer]), "document.pdf");
+          
+          const res = await fetch(`${backendUrl}/analyze`, {
+            method: 'POST',
+            headers: {
+              'X-Gemini-API-Key': getActiveKey()
+            },
+            body: formData
+          });
+          
+          if (!res.ok) {
+            const errorJson = await res.json().catch(() => ({}));
+            const errorMsg = errorJson.detail || `HTTP ${res.status}`;
+            throw new Error(`Backend Error: ${errorMsg}`);
+          }
+          
+          const data = await res.json();
+          summary = data.analysis;
+        } else {
+          // 2. Parse PDF (local JS for SUP/AIC)
+          updateQueueItemStatus(item.id, 'active', 'Parsing PDF...');
+          pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
+          const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+          const pdf = await loadingTask.promise;
+          
+          let fullText = '';
+          const maxPages = Math.min(pdf.numPages, 30);
+          for (let i = 1; i <= maxPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(t => t.str).join(' ');
+            fullText += pageText + '\n';
+          }
 
-        if (!fullText.trim()) {
-          throw new Error('No readable text in PDF (image-only or scanned).');
-        }
+          if (!fullText.trim()) {
+            throw new Error('No readable text in PDF (image-only or scanned).');
+          }
 
-        // 3. Summarize
-        updateQueueItemStatus(item.id, 'active', 'Analyzing AI...');
-        const summary = await callLLMAPI(fullText, config);
+          // 3. Summarize
+          updateQueueItemStatus(item.id, 'active', 'Analyzing AI...');
+          summary = await callLLMAPI(fullText, config);
+        }
         
         item.summary = summary;
         summariesResults.push({ url: item.url, summaryText: summary });

@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     geminiApiKey: '',
     model: 'deepseek-v4-flash',
     customModel: '',
+    backendUrl: '',
     systemPrompt: DEFAULT_PROMPT
   }, (items) => {
     providerSelect.value = items.provider;
@@ -114,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('geminiApiKey').value = gemKey;
     document.getElementById('systemPrompt').value = items.systemPrompt;
     customModelInput.value = items.customModel;
+    document.getElementById('backendUrl').value = items.backendUrl || '';
     
     if (items.model === 'custom') {
       customModelGroup.style.display = 'block';
@@ -129,6 +131,7 @@ document.getElementById('saveBtn').addEventListener('click', () => {
   const geminiApiKey = document.getElementById('geminiApiKey').value.trim();
   const model = modelSelect.value;
   const customModel = customModelInput.value.trim();
+  const backendUrl = document.getElementById('backendUrl').value.trim();
   const systemPrompt = document.getElementById('systemPrompt').value;
 
   chrome.storage.sync.set({
@@ -138,6 +141,7 @@ document.getElementById('saveBtn').addEventListener('click', () => {
     geminiApiKey,
     model,
     customModel,
+    backendUrl,
     systemPrompt
   }, () => {
     const status = document.getElementById('status');
