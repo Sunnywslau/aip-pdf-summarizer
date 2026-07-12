@@ -162,11 +162,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         const formData = new FormData();
         formData.append("file", new Blob([arrayBuffer]), "document.pdf");
         
+        const headers = {};
+        const geminiKey = config.geminiApiKey || (config.provider === 'gemini' ? config.apiKey : '');
+        if (geminiKey) {
+          headers['X-Gemini-API-Key'] = geminiKey;
+        }
+
         const res = await fetch(`${backendUrl}/analyze`, {
           method: 'POST',
-          headers: {
-            'X-Gemini-API-Key': getActiveKey()
-          },
+          headers: headers,
           body: formData
         });
         
