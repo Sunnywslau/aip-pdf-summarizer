@@ -26,6 +26,7 @@ def classify_page(page_text: str) -> str:
     is_sid = bool(re.search(r'\bsid\b', header_lower)) or "standard departure" in text_lower or "instrument departure" in text_lower
     is_star = bool(re.search(r'\bstar\b', header_lower)) or "standard arrival" in text_lower or "instrument arrival" in text_lower
     is_iap = bool(re.search(r'\biac\b', header_lower)) or bool(re.search(r'\biap\b', header_lower)) or "instrument approach" in text_lower or "approach chart" in text_lower
+    is_chart = "chart" in header_lower or "chart" in text_lower[:200]
 
     if is_gen:
         return "GEN"
@@ -41,6 +42,8 @@ def classify_page(page_text: str) -> str:
         return "IAP"
     
     if is_ad:
+        if is_chart:
+            return "AD_CHART"
         if "runway physical characteristics" in text_lower or "rwy physical characteristics" in text_lower:
             return "AD_RUNWAY"
         if "runway" in text_lower or "rwy" in text_lower:
