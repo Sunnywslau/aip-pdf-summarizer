@@ -2,7 +2,7 @@ import os
 import fitz
 import google.generativeai as genai
 from typing import Dict, Optional
-from utils.change_bar_detector import detect_change_bars
+from utils.change_bar_detector import detect_change_bars, get_change_bar_spans, get_annotated_text
 from utils.section_classifier import classify_page
 
 class IntelAgent:
@@ -46,20 +46,27 @@ class IntelAgent:
             # Step 2: Classify and route pages
             for page_num in range(len(doc)):
                 page = doc[page_num]
-                text = page.get_text()
-                category = classify_page(text)
-                text_lower = text.lower()
+                raw_text = page.get_text()
+                category = classify_page(raw_text)
+                text_lower = raw_text.lower()
                 
                 has_cb = page_num in changed_pages_set
                 is_procedure_chart = category in ["AD_CHART", "SID", "STAR", "IAP"]
                 
                 if not (has_cb or is_procedure_chart):
                     continue
+                
+                # If page has change bars, annotate line-level changes
+                if has_cb:
+                    cb_spans = get_change_bar_spans(page)
+                    annotated_text = get_annotated_text(page, cb_spans)
+                else:
+                    annotated_text = raw_text
                     
                 page_info = {
                     "page_num": page_num + 1,
                     "category": category,
-                    "text": text
+                    "text": annotated_text
                 }
                 
                 has_proc_kws = any(kw in text_lower for kw in proc_keywords)

@@ -1,10 +1,9 @@
 import fitz
-from typing import List, Union
+from pathlib import Path
 
-def get_change_bar_spans(page) -> List[tuple]:
-    """
-    Gets the vertical (y0, y1) spans of change bars on a given page.
-    """
+PDF_PATH = "/Users/wsl/Code/AIP_Reader/data/UA_AMDT_A_2026_009_en_2026-09-03.pdf"
+
+def get_change_bar_spans(page) -> list:
     page_width = page.rect.width
     drawings = page.get_drawings()
     spans = []
@@ -24,17 +23,14 @@ def get_change_bar_spans(page) -> List[tuple]:
             spans.append((rect.y0, rect.y1))
     return spans
 
-def get_annotated_text(page, cb_spans: List[tuple]) -> str:
-    """
-    Returns the page text with lines near the change bars prefixed with [CHANGED].
-    """
+def get_annotated_text(page, cb_spans) -> str:
     if not cb_spans:
         return page.get_text()
         
     annotated_blocks = []
     blocks = page.get_text("dict")["blocks"]
     
-    # Sort blocks top-to-bottom, left-to-right
+    # Sort blocks top-to-bottom
     blocks.sort(key=lambda b: (b["bbox"][1], b["bbox"][0]))
     
     for b in blocks:
@@ -51,7 +47,6 @@ def get_annotated_text(page, cb_spans: List[tuple]) -> str:
             
             is_changed = False
             for by0, by1 in cb_spans:
-                # Add tolerance of 3 points
                 if (by0 - 3) <= l_mid <= (by1 + 3):
                     is_changed = True
                     break
@@ -60,25 +55,26 @@ def get_annotated_text(page, cb_spans: List[tuple]) -> str:
                 block_lines.append(f"[CHANGED] {line_text}")
             else:
                 block_lines.append(line_text)
-                
+        
         if block_lines:
             annotated_blocks.append("\n".join(block_lines))
             
     return "\n\n".join(annotated_blocks)
 
-def detect_change_bars(pdf_source: Union[str, bytes]) -> List[int]:
-    """
-    Scans a PDF (either file path string or bytes stream) and returns
-    a list of 0-indexed page numbers containing a change bar.
-    """
-    if isinstance(pdf_source, bytes):
-        doc = fitz.open(stream=pdf_source, filetype="pdf")
-    else:
-        doc = fitz.open(str(pdf_source))
-        
-    changed_pages = []
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-        if get_change_bar_spans(page):
-            changed_pages.append(page_num)
-    return changed_pages
+doc = fitz.open(PDF_PATH)
+print(f"Total pages: {len(doc)}")
+
+# Find first 3 pages that have change bars
+count = 0
+for idx in range(len(doc)):
+    page = doc[idx]
+    spans = get_change_bar_spans(page)
+    if spans:
+        print(f"\n--- Page {idx + 1} has {len(spans)} change bar(s) ---")
+        annotated = get_annotated_text(page, spans)
+        # Print first 300 characters of the annotated text
+        print(annotated[:500])
+        print("...")
+        count += 1
+        if count >= 3:
+            break
