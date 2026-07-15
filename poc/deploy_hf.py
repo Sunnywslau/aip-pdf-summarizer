@@ -55,7 +55,7 @@ def deploy():
     os.makedirs(local_dir)
     
     # Copy backend files into deployment directory
-    backend_src = "/Users/wsl/Code/AIP_Reader/temp_repo/backend"
+    backend_src = "/Users/wsl/Code/AIP_Reader/aip-pdf-summarizer/backend"
     for item in os.listdir(backend_src):
         s = os.path.join(backend_src, item)
         d = os.path.join(local_dir, item)

@@ -32,4 +32,4 @@ def search_files(directory):
                 pass
 
 if __name__ == "__main__":
-    search_files("/Users/wsl/Code/AIP_Reader/temp_repo")
+    search_files("/Users/wsl/Code/AIP_Reader/aip-pdf-summarizer")

@@ -74,7 +74,7 @@ def pause_and_deploy():
     os.makedirs(local_dir)
     
     # Copy backend files (using the original Dockerfile structure)
-    backend_src = "/Users/wsl/Code/AIP_Reader/temp_repo/backend"
+    backend_src = "/Users/wsl/Code/AIP_Reader/aip-pdf-summarizer/backend"
     import shutil
     for item in os.listdir(backend_src):
         s = os.path.join(backend_src, item)
