@@ -80,7 +80,7 @@ class IntelAgent:
                 elif category in ["SID", "STAR", "IAP", "ENR"]:
                     route_to_procedure = True
                 elif category == "AD_CHART":
-                    lines = [l.strip() for l in text.split("\n") if l.strip()]
+                    lines = [l.strip() for l in raw_text.split("\n") if l.strip()]
                     header_lower = " | ".join(lines[:4]).lower()
                     is_rwy_chart = any(kw in header_lower for kw in ["aerodrome chart", "docking chart", "obstacle chart", "movement chart"])
                     if is_rwy_chart or has_rwy_kws:
