@@ -7,23 +7,17 @@ Provide the summary using exactly these four sections, utilizing bold text, inli
 4. **Key Operational Summary & Dates**: Briefly summarize operational changes and effective dates/times. Use \`inline code\` for dates/times (e.g., \`2026-06-07 to 2026-06-20\`).`;
 
 const PROVIDER_MODELS = {
-  deepseek: [
-    { value: 'deepseek-v4-flash', text: 'DeepSeek V4 Flash (Recommended - Fast)' },
-    { value: 'deepseek-v4-pro', text: 'DeepSeek V4 Pro (Reasoning & Complex Tasks)' },
-    { value: 'custom', text: 'Custom Model...' }
-  ],
-  github: [
-    { value: 'gpt-4o-mini', text: 'GPT-4o Mini (Recommended - Fast & Accurate)' },
-    { value: 'gpt-4o', text: 'GPT-4o (Powerful Reasoning)' },
-    { value: 'meta-llama-3.1-70b-instruct', text: 'Llama 3.1 70B (Meta Open Source)' },
-    { value: 'custom', text: 'Custom Model...' }
-  ],
   gemini: [
-    { value: 'gemini-3.5-flash', text: 'Gemini 3.5 Flash (Recommended - State of the Art)' },
-    { value: 'gemini-2.5-flash', text: 'Gemini 2.5 Flash (Recommended - Fast & Modern)' },
-    { value: 'gemini-2.5-pro', text: 'Gemini 2.5 Pro (Powerful reasoning)' },
+    { value: 'gemini-3.5-flash', text: 'Gemini 3.5 Flash (Recommended)' },
+    { value: 'gemini-2.5-flash', text: 'Gemini 2.5 Flash (Fast & Modern)' },
+    { value: 'gemini-2.5-pro', text: 'Gemini 2.5 Pro (Powerful Reasoning)' },
     { value: 'gemini-1.5-flash', text: 'Gemini 1.5 Flash (Legacy)' },
     { value: 'gemini-1.5-pro', text: 'Gemini 1.5 Pro (Legacy)' },
+    { value: 'custom', text: 'Custom Model...' }
+  ],
+  deepseek: [
+    { value: 'deepseek-v4-pro', text: 'DeepSeek V4 Pro (Recommended - Advanced Reasoning)' },
+    { value: 'deepseek-v4-flash', text: 'DeepSeek V4 Flash (Fast)' },
     { value: 'custom', text: 'Custom Model...' }
   ]
 };
@@ -34,7 +28,6 @@ const customModelGroup = document.getElementById('customModelGroup');
 const customModelInput = document.getElementById('customModel');
 
 const deepseekKeyGroup = document.getElementById('deepseekKeyGroup');
-const githubKeyGroup = document.getElementById('githubKeyGroup');
 const geminiKeyGroup = document.getElementById('geminiKeyGroup');
 
 function populateModels(provider, selectedModelValue) {
@@ -54,13 +47,10 @@ function populateModels(provider, selectedModelValue) {
 
 function updateKeyVisibility(provider) {
   deepseekKeyGroup.style.display = 'none';
-  githubKeyGroup.style.display = 'none';
   geminiKeyGroup.style.display = 'none';
 
   if (provider === 'gemini') {
     geminiKeyGroup.style.display = 'block';
-  } else if (provider === 'github') {
-    githubKeyGroup.style.display = 'block';
   } else {
     deepseekKeyGroup.style.display = 'block';
   }
@@ -86,12 +76,11 @@ modelSelect.addEventListener('change', (e) => {
 // Load settings on startup
 document.addEventListener('DOMContentLoaded', () => {
   chrome.storage.sync.get({
-    provider: 'deepseek',
+    provider: 'gemini',
     apiKey: '', // legacy
     deepseekApiKey: '',
-    githubApiKey: '',
     geminiApiKey: '',
-    model: 'deepseek-v4-flash',
+    model: 'gemini-3.5-flash',
     customModel: '',
     backendUrl: '',
     systemPrompt: DEFAULT_PROMPT
@@ -112,7 +101,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.getElementById('deepseekApiKey').value = dsKey;
-    document.getElementById('githubApiKey').value = items.githubApiKey || '';
     document.getElementById('geminiApiKey').value = gemKey;
     document.getElementById('systemPrompt').value = items.systemPrompt;
     customModelInput.value = items.customModel;
@@ -138,7 +126,6 @@ document.getElementById('saveBtn').addEventListener('click', () => {
   chrome.storage.sync.set({
     provider,
     deepseekApiKey,
-    githubApiKey,
     geminiApiKey,
     model,
     customModel,
