@@ -16,8 +16,8 @@ const PROVIDER_MODELS = {
     { value: 'custom', text: 'Custom Model...' }
   ],
   deepseek: [
-    { value: 'deepseek-v4-pro', text: 'DeepSeek V4 Pro (Recommended - Advanced Reasoning)' },
-    { value: 'deepseek-v4-flash', text: 'DeepSeek V4 Flash (Fast)' },
+    { value: 'deepseek-v4-flash', text: 'DeepSeek V4 Flash (Recommended - Fast)' },
+    { value: 'deepseek-v4-pro', text: 'DeepSeek V4 Pro (Advanced Reasoning)' },
     { value: 'custom', text: 'Custom Model...' }
   ]
 };
