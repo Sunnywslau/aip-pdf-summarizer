@@ -116,7 +116,6 @@ document.addEventListener('DOMContentLoaded', () => {
 document.getElementById('saveBtn').addEventListener('click', () => {
   const provider = providerSelect.value;
   const deepseekApiKey = document.getElementById('deepseekApiKey').value.trim();
-  const githubApiKey = document.getElementById('githubApiKey').value.trim();
   const geminiApiKey = document.getElementById('geminiApiKey').value.trim();
   const model = modelSelect.value;
   const customModel = customModelInput.value.trim();
