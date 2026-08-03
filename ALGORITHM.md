@@ -1,6 +1,9 @@
 # AIP Amendment Parser: Core Algorithms & Engineering Architecture
 
-This document details the algorithms and processing pipeline implemented in the **AIP Amendment Parser** backend. It explains how the system processes large AIP PDF files in-memory, detects changes, targets specific text lines, and routes them to LLMs to output accurate change summaries with zero false positives.
+This document details the algorithms and processing pipeline implemented in the **AIP Amendment Parser** backend. It explains how the system processes large AIP PDF files in-memory, detects changes, targets specific text lines, and routes them to an LLM to output accurate change summaries with zero false positives.
+
+> **Active Model**: `gemini-3.5-flash` (Google Gemini 3.5 Flash) — hardcoded in `backend/services/intel_agent.py`.  
+> The Gemini API key is supplied at runtime via the `x-gemini-api-key` HTTP header from the Chrome Extension.
 
 ---
 
@@ -20,6 +23,7 @@ graph TD
     G --> H
     H --> I[Merged Markdown Report Output]
 ```
+
 
 ---
 
