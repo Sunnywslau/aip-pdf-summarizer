@@ -1,5 +1,9 @@
 import httpx
 import os
+import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions"
 GEMINI_ENDPOINT_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
@@ -67,18 +71,26 @@ class SupAgent:
                 },
             ],
         }
-        async with httpx.AsyncClient(timeout=120) as client:
-            res = await client.post(
-                DEEPSEEK_ENDPOINT,
-                json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                },
-            )
-        if not res.is_success:
+        retryable = {429, 503, 502, 504}
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            async with httpx.AsyncClient(timeout=120) as client:
+                res = await client.post(
+                    DEEPSEEK_ENDPOINT,
+                    json=payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {api_key}",
+                    },
+                )
+            if res.is_success:
+                return res.json()["choices"][0]["message"]["content"]
+            if res.status_code in retryable and attempt < max_attempts:
+                wait = 2 ** attempt  # 2s, 4s
+                logger.warning(f"DeepSeek {res.status_code} on attempt {attempt}, retrying in {wait}s...")
+                time.sleep(wait)
+                continue
             raise RuntimeError(f"DeepSeek API Error: {res.status_code} — {res.text}")
-        return res.json()["choices"][0]["message"]["content"]
 
     async def _call_gemini(
         self, text: str, api_key: str, model: str, system_prompt: str
@@ -88,12 +100,20 @@ class SupAgent:
             "contents": [{"parts": [{"text": f"Analyze the following document and provide a summary:\n\n{text}"}]}],
             "systemInstruction": {"parts": [{"text": system_prompt}]},
         }
-        async with httpx.AsyncClient(timeout=120) as client:
-            res = await client.post(
-                endpoint,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-            )
-        if not res.is_success:
+        retryable = {429, 503, 502, 504}
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            async with httpx.AsyncClient(timeout=120) as client:
+                res = await client.post(
+                    endpoint,
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                )
+            if res.is_success:
+                return res.json()["candidates"][0]["content"]["parts"][0]["text"]
+            if res.status_code in retryable and attempt < max_attempts:
+                wait = 2 ** attempt  # 2s, 4s
+                logger.warning(f"Gemini {res.status_code} on attempt {attempt}, retrying in {wait}s...")
+                time.sleep(wait)
+                continue
             raise RuntimeError(f"Gemini API Error: {res.status_code} — {res.text}")
-        return res.json()["candidates"][0]["content"]["parts"][0]["text"]

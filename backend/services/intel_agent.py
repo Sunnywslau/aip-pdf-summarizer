@@ -1,9 +1,13 @@
 import os
+import time
+import logging
 import fitz
 import httpx
 from typing import Optional
 from utils.change_bar_detector import detect_change_bars, get_change_bar_spans, get_annotated_text
 from utils.section_classifier import classify_page
+
+logger = logging.getLogger(__name__)
 
 DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions"
 GEMINI_ENDPOINT_TEMPLATE = (
@@ -275,22 +279,46 @@ Here is the text to analyze:
             "model": model_name,
             "messages": [{"role": "user", "content": prompt}],
         }
-        with httpx.Client(timeout=180) as client:
-            res = client.post(
-                DEEPSEEK_ENDPOINT,
-                json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                },
-            )
-        if not res.is_success:
+        retryable = {429, 503, 502, 504}
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            with httpx.Client(timeout=180) as client:
+                res = client.post(
+                    DEEPSEEK_ENDPOINT,
+                    json=payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {api_key}",
+                    },
+                )
+            if res.is_success:
+                return res.json()["choices"][0]["message"]["content"]
+            if res.status_code in retryable and attempt < max_attempts:
+                wait = 2 ** attempt  # 2s, 4s
+                logger.warning(f"DeepSeek {res.status_code} on attempt {attempt}, retrying in {wait}s...")
+                time.sleep(wait)
+                continue
             raise RuntimeError(f"DeepSeek API Error: {res.status_code} — {res.text}")
-        return res.json()["choices"][0]["message"]["content"]
 
     def _call_gemini(self, prompt: str, api_key: str, model_name: str) -> str:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(model_name)
-        response = model.generate_content(prompt)
-        return response.text
+        endpoint = GEMINI_ENDPOINT_TEMPLATE.format(model=model_name, key=api_key)
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+        }
+        retryable = {429, 503, 502, 504}
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            with httpx.Client(timeout=180) as client:
+                res = client.post(
+                    endpoint,
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                )
+            if res.is_success:
+                return res.json()["candidates"][0]["content"]["parts"][0]["text"]
+            if res.status_code in retryable and attempt < max_attempts:
+                wait = 2 ** attempt  # 2s, 4s
+                logger.warning(f"Gemini {res.status_code} on attempt {attempt}, retrying in {wait}s...")
+                time.sleep(wait)
+                continue
+            raise RuntimeError(f"Gemini API Error: {res.status_code} — {res.text}")
