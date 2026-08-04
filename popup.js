@@ -161,9 +161,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         const headers = {};
         const geminiKey = config.geminiApiKey || (config.provider === 'gemini' ? config.apiKey : '');
-        if (geminiKey) {
-          headers['X-Gemini-API-Key'] = geminiKey;
-        }
+        if (geminiKey) headers['X-Gemini-API-Key'] = geminiKey;
+        if (config.deepseekApiKey) headers['X-DeepSeek-API-Key'] = config.deepseekApiKey;
 
         const res = await fetch(`${backendUrl}/analyze`, {
           method: 'POST',

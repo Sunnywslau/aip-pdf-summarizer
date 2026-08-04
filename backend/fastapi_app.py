@@ -43,14 +43,19 @@ def read_root():
 @app.post("/analyze")
 async def analyze_document(
     file: UploadFile = File(...),
-    x_gemini_api_key: Optional[str] = Header(None)
+    x_gemini_api_key: Optional[str] = Header(None),
+    x_deepseek_api_key: Optional[str] = Header(None),
 ):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
-        
+
     try:
         pdf_bytes = await file.read()
-        report_text = agent.analyze_aip(pdf_bytes, user_api_key=x_gemini_api_key)
+        report_text = agent.analyze_aip(
+            pdf_bytes,
+            user_api_key=x_gemini_api_key,
+            user_deepseek_key=x_deepseek_api_key,
+        )
         return {
             "filename": file.filename,
             "analysis": report_text
