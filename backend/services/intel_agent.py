@@ -31,7 +31,7 @@ class IntelAgent:
         if user_deepseek_key:
             provider = "deepseek"
             active_key = user_deepseek_key
-            model_name = "deepseek-chat"
+            model_name = "deepseek-v4-flash"
         else:
             provider = "gemini"
             active_key = user_api_key or os.getenv("GEMINI_API_KEY")

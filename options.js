@@ -9,15 +9,15 @@ Provide the summary using exactly these four sections, utilizing bold text, inli
 const PROVIDER_MODELS = {
   gemini: [
     { value: 'gemini-3.5-flash', text: 'Gemini 3.5 Flash (Recommended)' },
-    { value: 'gemini-2.5-flash', text: 'Gemini 2.5 Flash (Fast & Modern)' },
-    { value: 'gemini-2.5-pro', text: 'Gemini 2.5 Pro (Powerful Reasoning)' },
+    { value: 'gemini-2.5-flash', text: 'Gemini 2.5 Flash' },
+    { value: 'gemini-2.5-pro',   text: 'Gemini 2.5 Pro (Powerful Reasoning)' },
     { value: 'gemini-1.5-flash', text: 'Gemini 1.5 Flash (Legacy)' },
-    { value: 'gemini-1.5-pro', text: 'Gemini 1.5 Pro (Legacy)' },
+    { value: 'gemini-1.5-pro',   text: 'Gemini 1.5 Pro (Legacy)' },
     { value: 'custom', text: 'Custom Model...' }
   ],
   deepseek: [
-    { value: 'deepseek-v4-flash', text: 'DeepSeek V4 Flash (Recommended - Fast)' },
-    { value: 'deepseek-v4-pro', text: 'DeepSeek V4 Pro (Advanced Reasoning)' },
+    { value: 'deepseek-v4-flash', text: 'DeepSeek V4 Flash (Recommended)' },
+    { value: 'deepseek-v4-pro',   text: 'DeepSeek V4 Pro (Advanced Reasoning)' },
     { value: 'custom', text: 'Custom Model...' }
   ]
 };
@@ -46,14 +46,11 @@ function populateModels(provider, selectedModelValue) {
 }
 
 function updateKeyVisibility(provider) {
-  deepseekKeyGroup.style.display = 'none';
-  geminiKeyGroup.style.display = 'none';
-
-  if (provider === 'gemini') {
-    geminiKeyGroup.style.display = 'block';
-  } else {
-    deepseekKeyGroup.style.display = 'block';
-  }
+  // Always show both key fields — both keys are used simultaneously.
+  // DeepSeek key is used when DeepSeek is selected; Gemini key is used as fallback
+  // for Amendment processing even when DeepSeek is the primary provider.
+  geminiKeyGroup.style.display = 'block';
+  deepseekKeyGroup.style.display = 'block';
 }
 
 // Watch provider selection change

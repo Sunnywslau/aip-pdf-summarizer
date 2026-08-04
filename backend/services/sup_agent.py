@@ -39,7 +39,7 @@ class SupAgent:
         # Sanitize model name — use provider-appropriate defaults
         # if the passed model belongs to the other provider
         if user_deepseek_key:
-            deepseek_model = model if (model and model.startswith('deepseek')) else 'deepseek-chat'
+            deepseek_model = model if (model and model.startswith('deepseek')) else 'deepseek-v4-flash'
             return await self._call_deepseek(
                 text=text,
                 api_key=user_deepseek_key,
