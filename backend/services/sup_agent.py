@@ -36,21 +36,23 @@ class SupAgent:
     ) -> str:
         prompt = system_prompt or SYSTEM_PROMPT
 
-        # Prefer DeepSeek if key is supplied
+        # Sanitize model name — use provider-appropriate defaults
+        # if the passed model belongs to the other provider
         if user_deepseek_key:
+            deepseek_model = model if (model and model.startswith('deepseek')) else 'deepseek-chat'
             return await self._call_deepseek(
                 text=text,
                 api_key=user_deepseek_key,
-                model=model or "deepseek-chat",
+                model=deepseek_model,
                 system_prompt=prompt,
             )
 
-        # Fall back to Gemini
         if user_gemini_key:
+            gemini_model = model if (model and 'gemini' in model) else 'gemini-3.5-flash'
             return await self._call_gemini(
                 text=text,
                 api_key=user_gemini_key,
-                model=model or "gemini-3.5-flash",
+                model=gemini_model,
                 system_prompt=prompt,
             )
 
