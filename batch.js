@@ -244,12 +244,10 @@ document.addEventListener('DOMContentLoaded', () => {
           const modelName = config.model === 'custom' ? config.customModel : config.model;
 
           const supHeaders = { 'Content-Type': 'application/json' };
-          if (config.provider === 'deepseek' && config.deepseekApiKey) {
-            supHeaders['X-DeepSeek-API-Key'] = config.deepseekApiKey;
-          } else {
-            const geminiKey = config.geminiApiKey || config.apiKey;
-            if (geminiKey) supHeaders['X-Gemini-API-Key'] = geminiKey;
-          }
+          // Always send both keys — backend picks DeepSeek first if present, then Gemini
+          if (config.deepseekApiKey) supHeaders['X-DeepSeek-API-Key'] = config.deepseekApiKey;
+          const geminiKeyForSup = config.geminiApiKey || config.apiKey;
+          if (geminiKeyForSup) supHeaders['X-Gemini-API-Key'] = geminiKeyForSup;
 
           const supRes = await fetch(`${backendUrl}/analyze-sup`, {
             method: 'POST',
