@@ -180,15 +180,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         const data = await res.json();
         summary = data.analysis;
       } else {
-        // Process locally for SUP/AIC
+        // SUP/AIC: extract text locally, then send to backend for AI processing
+        // This routes all AI calls through Hugging Face server, bypassing
+        // HK Gemini restrictions and corporate DeepSeek firewall rules.
         showStatus('Parsing PDF text content...');
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
         const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
         const pdf = await loadingTask.promise;
-        
+
         let fullText = '';
         const maxPages = Math.min(pdf.numPages, 30);
-        
+
         for (let i = 1; i <= maxPages; i++) {
           showStatus(`Parsing PDF text content (Page ${i} of ${pdf.numPages})...`);
           const page = await pdf.getPage(i);
@@ -201,8 +203,36 @@ document.addEventListener('DOMContentLoaded', async () => {
           throw new Error('Could not extract any readable text from the PDF. The document might be image-only / scanned without OCR.');
         }
 
-        showStatus('Analyzing with AI...');
-        summary = await callLLMAPI(fullText, config);
+        showStatus('Sending to backend for AI analysis...');
+        const backendUrl = config.backendUrl || 'http://localhost:8000';
+        const modelName = config.model === 'custom' ? config.customModel : config.model;
+
+        const supHeaders = { 'Content-Type': 'application/json' };
+        if (config.provider === 'deepseek' && config.deepseekApiKey) {
+          supHeaders['X-DeepSeek-API-Key'] = config.deepseekApiKey;
+        } else {
+          const geminiKey = config.geminiApiKey || config.apiKey;
+          if (geminiKey) supHeaders['X-Gemini-API-Key'] = geminiKey;
+        }
+
+        const supRes = await fetch(`${backendUrl}/analyze-sup`, {
+          method: 'POST',
+          headers: supHeaders,
+          body: JSON.stringify({
+            text: fullText,
+            system_prompt: config.systemPrompt || null,
+            model: modelName || null
+          })
+        });
+
+        if (!supRes.ok) {
+          const errorJson = await supRes.json().catch(() => ({}));
+          const errorMsg = errorJson.detail || `HTTP ${supRes.status}`;
+          throw new Error(`Backend Error: ${errorMsg}`);
+        }
+
+        const supData = await supRes.json();
+        summary = supData.summary;
       }
 
       // 3. Show Result
@@ -217,80 +247,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  async function callLLMAPI(text, config) {
-    const provider = config.provider || 'gemini';
-    const modelName = config.model === 'custom' ? config.customModel : config.model;
-    const apiKey = provider === 'gemini'
-      ? (config.geminiApiKey || config.apiKey)
-      : (config.deepseekApiKey || config.apiKey);
-
-    if (provider === 'gemini') {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      const requestBody = {
-        contents: [
-          {
-            parts: [
-              {
-                text: text
-              }
-            ]
-          }
-        ],
-        systemInstruction: {
-          parts: [
-            {
-              text: config.systemPrompt
-            }
-          ]
-        }
-      };
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!res.ok) {
-        const errorJson = await res.json().catch(() => ({}));
-        const errorMsg = errorJson.error?.message || `HTTP ${res.status}`;
-        throw new Error(`Gemini API Error: ${errorMsg}`);
-      }
-
-      const data = await res.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response content from model.';
-    } else {
-      // DeepSeek API (OpenAI Compatible)
-      const endpoint = 'https://api.deepseek.com/chat/completions';
-      const requestBody = {
-        model: modelName,
-        messages: [
-          { role: 'system', content: config.systemPrompt },
-          { role: 'user', content: `Analyze the following document and provide a summary:\n\n${text}` }
-        ]
-      };
-
-      const res2 = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!res2.ok) {
-        const errorJson = await res2.json().catch(() => ({}));
-        const errorMsg = errorJson.error?.message || `HTTP ${res2.status}`;
-        throw new Error(`DeepSeek API Error: ${errorMsg}`);
-      }
-
-      const data2 = await res2.json();
-      return data2.choices?.[0]?.message?.content || 'No response content from model.';
-    }
-  }
 
   function showStatus(text) {
     statusContainer.style.display = 'flex';

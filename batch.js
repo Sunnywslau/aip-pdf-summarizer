@@ -239,9 +239,37 @@ document.addEventListener('DOMContentLoaded', () => {
             throw new Error('No readable text in PDF (image-only or scanned).');
           }
 
-          // 3. Summarize
-          updateQueueItemStatus(item.id, 'active', 'Analyzing AI...');
-          summary = await callLLMAPI(fullText, config);
+          // 3. Summarize via backend (bypasses HK Gemini block and corporate DeepSeek firewall)
+          updateQueueItemStatus(item.id, 'active', 'Sending to backend AI...');
+          const backendUrl = config.backendUrl || 'http://localhost:8000';
+          const modelName = config.model === 'custom' ? config.customModel : config.model;
+
+          const supHeaders = { 'Content-Type': 'application/json' };
+          if (config.provider === 'deepseek' && config.deepseekApiKey) {
+            supHeaders['X-DeepSeek-API-Key'] = config.deepseekApiKey;
+          } else {
+            const geminiKey = config.geminiApiKey || config.apiKey;
+            if (geminiKey) supHeaders['X-Gemini-API-Key'] = geminiKey;
+          }
+
+          const supRes = await fetch(`${backendUrl}/analyze-sup`, {
+            method: 'POST',
+            headers: supHeaders,
+            body: JSON.stringify({
+              text: fullText,
+              system_prompt: config.systemPrompt || null,
+              model: modelName || null
+            })
+          });
+
+          if (!supRes.ok) {
+            const errorJson = await supRes.json().catch(() => ({}));
+            const errorMsg = errorJson.detail || `HTTP ${supRes.status}`;
+            throw new Error(`Backend Error: ${errorMsg}`);
+          }
+
+          const supData = await supRes.json();
+          summary = supData.summary;
         }
         
         item.summary = summary;
@@ -363,78 +391,4 @@ document.addEventListener('DOMContentLoaded', () => {
     summariesContainer.appendChild(card);
   }
 
-  async function callLLMAPI(text, config) {
-    const provider = config.provider || 'gemini';
-    const modelName = config.model === 'custom' ? config.customModel : config.model;
-    const apiKey = provider === 'gemini'
-      ? (config.geminiApiKey || config.apiKey)
-      : (config.deepseekApiKey || config.apiKey);
-
-    if (provider === 'gemini') {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      const requestBody = {
-        contents: [
-          {
-            parts: [
-              {
-                text: text
-              }
-            ]
-          }
-        ],
-        systemInstruction: {
-          parts: [
-            {
-              text: config.systemPrompt
-            }
-          ]
-        }
-      };
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!res.ok) {
-        const errorJson = await res.json().catch(() => ({}));
-        const errorMsg = errorJson.error?.message || `HTTP ${res.status}`;
-        throw new Error(`Gemini API Error: ${errorMsg}`);
-      }
-
-      const data = await res.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response content from model.';
-    } else {
-      // DeepSeek API (OpenAI Compatible)
-      const endpoint = 'https://api.deepseek.com/chat/completions';
-      const requestBody = {
-        model: modelName,
-        messages: [
-          { role: 'system', content: config.systemPrompt },
-          { role: 'user', content: `Analyze the following document and provide a summary:\n\n${text}` }
-        ]
-      };
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!res.ok) {
-        const errorJson = await res.json().catch(() => ({}));
-        const errorMsg = errorJson.error?.message || `HTTP ${res.status}`;
-        throw new Error(`DeepSeek API Error: ${errorMsg}`);
-      }
-
-      const data = await res.json();
-      return data.choices?.[0]?.message?.content || 'No response content from model.';
-    }
-  }
 });

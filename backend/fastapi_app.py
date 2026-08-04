@@ -3,12 +3,14 @@ import sys
 from typing import Optional
 from fastapi import FastAPI, File, UploadFile, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
 # Add the current directory to path to resolve imports correctly
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from services.intel_agent import IntelAgent
+from services.sup_agent import SupAgent
 
 load_dotenv()
 
@@ -28,6 +30,7 @@ app.add_middleware(
 )
 
 agent = IntelAgent()
+sup_agent = SupAgent()
 
 @app.get("/")
 def read_root():
@@ -54,3 +57,40 @@ async def analyze_document(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
+
+
+class SupRequest(BaseModel):
+    text: str
+    system_prompt: str = None
+    model: str = None
+
+
+@app.post("/analyze-sup")
+async def analyze_sup(
+    body: SupRequest,
+    x_deepseek_api_key: Optional[str] = Header(None),
+    x_gemini_api_key: Optional[str] = Header(None),
+):
+    """Summarize an AIP SUP / AIC document via server-side LLM call.
+    Accepts extracted text (not a PDF). Tries DeepSeek first, then Gemini.
+    All calls originate from the Hugging Face server, bypassing regional
+    and corporate firewall restrictions on AI endpoints.
+    """
+    if not body.text or not body.text.strip():
+        raise HTTPException(status_code=400, detail="text field is required and must not be empty.")
+    if not x_deepseek_api_key and not x_gemini_api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Provide at least one of: X-DeepSeek-API-Key or X-Gemini-API-Key header.",
+        )
+    try:
+        summary = await sup_agent.summarize(
+            text=body.text,
+            user_deepseek_key=x_deepseek_api_key,
+            user_gemini_key=x_gemini_api_key,
+            system_prompt=body.system_prompt,
+            model=body.model,
+        )
+        return {"summary": summary}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to summarize document: {str(e)}")
