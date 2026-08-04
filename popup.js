@@ -61,6 +61,68 @@ document.addEventListener('DOMContentLoaded', async () => {
   let config = {};
   let tabLoaded = false;
   let configLoaded = false;
+  let aiMode = 'auto'; // 'auto' | 'deepseek' | 'gemini'
+
+  // --- AI Selector ---
+  const aiAutoBtn    = document.getElementById('aiAutoBtn');
+  const aiDeepSeekBtn = document.getElementById('aiDeepSeekBtn');
+  const aiGeminiBtn  = document.getElementById('aiGeminiBtn');
+  const aiBadge      = document.getElementById('aiBadge');
+
+  function updateAiBadge() {
+    const hasDeepSeek = !!config.deepseekApiKey;
+    const hasGemini   = !!(config.geminiApiKey || config.apiKey);
+
+    // Determine effective provider
+    let effective = null;
+    if (aiMode === 'deepseek') effective = hasDeepSeek ? 'deepseek' : null;
+    else if (aiMode === 'gemini') effective = hasGemini ? 'gemini' : null;
+    else effective = hasDeepSeek ? 'deepseek' : (hasGemini ? 'gemini' : null); // auto
+
+    // Update badge
+    aiBadge.className = 'ai-badge';
+    if (effective === 'deepseek') {
+      aiBadge.textContent = 'DeepSeek';
+      aiBadge.classList.add('badge-deepseek');
+    } else if (effective === 'gemini') {
+      aiBadge.textContent = 'Gemini';
+      aiBadge.classList.add('badge-gemini');
+    } else {
+      aiBadge.textContent = 'No key';
+      aiBadge.classList.add('badge-none');
+    }
+
+    // Update button active states
+    aiAutoBtn.className    = 'ai-toggle-btn' + (aiMode === 'auto' ? (effective === 'deepseek' ? ' active-deepseek' : ' active-gemini') : '');
+    aiDeepSeekBtn.className = 'ai-toggle-btn' + (aiMode === 'deepseek' ? ' active-deepseek' : '');
+    aiGeminiBtn.className  = 'ai-toggle-btn' + (aiMode === 'gemini' ? ' active-gemini' : '');
+  }
+
+  function setAiMode(mode) {
+    aiMode = mode;
+    updateAiBadge();
+  }
+
+  aiAutoBtn.addEventListener('click',     () => setAiMode('auto'));
+  aiDeepSeekBtn.addEventListener('click', () => setAiMode('deepseek'));
+  aiGeminiBtn.addEventListener('click',   () => setAiMode('gemini'));
+
+  function buildApiHeaders() {
+    const hasDeepSeek = !!config.deepseekApiKey;
+    const geminiKey   = config.geminiApiKey || config.apiKey;
+    const headers     = {};
+
+    if (aiMode === 'deepseek') {
+      if (config.deepseekApiKey) headers['X-DeepSeek-API-Key'] = config.deepseekApiKey;
+    } else if (aiMode === 'gemini') {
+      if (geminiKey) headers['X-Gemini-API-Key'] = geminiKey;
+    } else {
+      // auto: send both, backend picks DeepSeek first
+      if (config.deepseekApiKey) headers['X-DeepSeek-API-Key'] = config.deepseekApiKey;
+      if (geminiKey) headers['X-Gemini-API-Key'] = geminiKey;
+    }
+    return headers;
+  }
 
   function getActiveKey() {
     if (config.provider === 'gemini') {
@@ -72,13 +134,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function updateButtonState() {
     if (tabLoaded && configLoaded) {
-      if (getActiveKey()) {
+      const hasDeepSeek = !!config.deepseekApiKey;
+      const hasGemini   = !!(config.geminiApiKey || config.apiKey);
+      if (hasDeepSeek || hasGemini) {
         summarizeBtn.disabled = false;
         clearError();
       } else {
         showError('Please set your API Key in the Settings page first.');
         summarizeBtn.disabled = true;
       }
+      updateAiBadge();
     }
   }
 
@@ -155,14 +220,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (isAmendment) {
         showStatus('Uploading and analyzing with backend...');
         const backendUrl = config.backendUrl || 'http://localhost:8000';
-        
+
         const formData = new FormData();
         formData.append("file", new Blob([arrayBuffer]), "document.pdf");
-        
-        const headers = {};
-        const geminiKey = config.geminiApiKey || (config.provider === 'gemini' ? config.apiKey : '');
-        if (geminiKey) headers['X-Gemini-API-Key'] = geminiKey;
-        if (config.deepseekApiKey) headers['X-DeepSeek-API-Key'] = config.deepseekApiKey;
+
+        const headers = buildApiHeaders();
+        // Content-Type must NOT be set for FormData (browser sets boundary automatically)
 
         const res = await fetch(`${backendUrl}/analyze`, {
           method: 'POST',
@@ -206,11 +269,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const backendUrl = config.backendUrl || 'http://localhost:8000';
         const modelName = config.model === 'custom' ? config.customModel : config.model;
 
-        const supHeaders = { 'Content-Type': 'application/json' };
-        // Always send both keys — backend picks DeepSeek first if present, then Gemini
-        if (config.deepseekApiKey) supHeaders['X-DeepSeek-API-Key'] = config.deepseekApiKey;
-        const geminiKeyForSup = config.geminiApiKey || config.apiKey;
-        if (geminiKeyForSup) supHeaders['X-Gemini-API-Key'] = geminiKeyForSup;
+        const supHeaders = { 'Content-Type': 'application/json', ...buildApiHeaders() };
 
         const supRes = await fetch(`${backendUrl}/analyze-sup`, {
           method: 'POST',
