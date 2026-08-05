@@ -145,30 +145,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Extract rich-text hyperlinks from pasted HTML
     const anchors = Array.from(emailInput.querySelectorAll('a')).map(a => ({
-      url: a.href,
+      url: a.href ? a.href.replace(/\\/g, '/') : '',
       text: a.textContent.trim()
     }));
 
     const rawMatches = matches.map(url => ({
-      url: url,
+      url: url.replace(/\\/g, '/'),
       text: ''
     }));
 
-    // Merge and deduplicate by URL
+    // Merge and filter to likely PDF or aviation document URLs
     const allLinks = [...anchors, ...rawMatches];
-    const uniqueLinks = [];
-    const seenUrls = new Set();
-    allLinks.forEach(link => {
-      if (link.url && !seenUrls.has(link.url)) {
-        seenUrls.add(link.url);
-        uniqueLinks.push(link);
-      }
-    });
-
-    console.log('Deduplicated Links Found:', uniqueLinks);
-
-    // Filter to likely PDF or aviation document URLs
-    const pdfLinks = uniqueLinks.filter(link => {
+    const pdfLinks = allLinks.filter(link => {
+      if (!link.url) return false;
       const lowerUrl = link.url.toLowerCase();
       const lowerText = link.text.toLowerCase();
       
@@ -188,7 +177,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log('Filtered PDF/Aviation Links:', pdfLinks);
 
-    if (pdfLinks.length === 0) {
+    // Group by URL to combine display names for identical URLs
+    const urlGroups = {};
+    pdfLinks.forEach(link => {
+      const url = link.url;
+      if (!urlGroups[url]) {
+        urlGroups[url] = {
+          url: url,
+          names: new Set()
+        };
+      }
+      if (link.text) {
+        urlGroups[url].names.add(link.text);
+      }
+    });
+
+    const uniquePdfLinks = Object.values(urlGroups).map(group => {
+      const namesArray = Array.from(group.names);
+      let combinedName = '';
+      if (namesArray.length > 0) {
+        if (namesArray.length > 3) {
+          combinedName = namesArray.slice(0, 3).join(', ') + ` (+${namesArray.length - 3} more)`;
+        } else {
+          combinedName = namesArray.join(', ');
+        }
+      }
+      return {
+        url: group.url,
+        name: combinedName || getFileName(group.url),
+        linkText: namesArray.join(', ')
+      };
+    });
+
+    console.log('Grouped Unique PDF Links:', uniquePdfLinks);
+
+    if (uniquePdfLinks.length === 0) {
       alert('No PDF URLs detected. Make sure the pasted text contains PDF links or hyperlinks.');
       return;
     }
@@ -199,12 +222,12 @@ document.addEventListener('DOMContentLoaded', () => {
     summariesResults = [];
     exportAllBtn.disabled = true;
     
-    queue = pdfLinks.map((link, index) => {
+    queue = uniquePdfLinks.map((link, index) => {
       return {
         id: index,
         url: link.url,
-        name: link.text || getFileName(link.url),
-        linkText: link.text || '',
+        name: link.name,
+        linkText: link.linkText,
         status: 'pending', // pending, active, completed, failed
         error: '',
         summary: ''
