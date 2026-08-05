@@ -107,6 +107,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    console.log('--- Batch Processing Debug ---');
+    console.log('Raw HTML pasted:', emailInput.innerHTML);
+    console.log('Raw Text parsed:', text);
+
     // Extract raw text URLs (handling potential spaces in filenames like "SUP 65/26.pdf" and trailing query parameters)
     const matches = [];
     const lines = text.split('\n');
@@ -140,18 +144,51 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Extract rich-text hyperlinks from pasted HTML
-    const anchorHrefs = Array.from(emailInput.querySelectorAll('a')).map(a => a.href);
+    const anchors = Array.from(emailInput.querySelectorAll('a')).map(a => ({
+      url: a.href,
+      text: a.textContent.trim()
+    }));
 
-    // Merge and deduplicate
-    const combinedUrls = [...new Set([...matches, ...anchorHrefs])];
+    const rawMatches = matches.map(url => ({
+      url: url,
+      text: ''
+    }));
 
-    // Filter to likely PDF URLs (ends with .pdf or contains /pdf/ or pdf in path)
-    const pdfUrls = combinedUrls.filter(url => {
-      const lower = url.toLowerCase();
-      return lower.endsWith('.pdf') || lower.includes('/pdf') || lower.includes('pdf');
+    // Merge and deduplicate by URL
+    const allLinks = [...anchors, ...rawMatches];
+    const uniqueLinks = [];
+    const seenUrls = new Set();
+    allLinks.forEach(link => {
+      if (link.url && !seenUrls.has(link.url)) {
+        seenUrls.add(link.url);
+        uniqueLinks.push(link);
+      }
     });
 
-    if (pdfUrls.length === 0) {
+    console.log('Deduplicated Links Found:', uniqueLinks);
+
+    // Filter to likely PDF or aviation document URLs
+    const pdfLinks = uniqueLinks.filter(link => {
+      const lowerUrl = link.url.toLowerCase();
+      const lowerText = link.text.toLowerCase();
+      
+      // 1. Keep if URL indicates it is a PDF
+      if (lowerUrl.endsWith('.pdf') || lowerUrl.includes('/pdf') || lowerUrl.includes('pdf')) {
+        return true;
+      }
+      
+      // 2. Keep if the link display text indicates it is an AIP/SUP/AIC document
+      const keywords = ['sup', 'aic', 'amdt', 'amendment', 'pdf', 'aip'];
+      if (keywords.some(keyword => lowerText.includes(keyword))) {
+        return true;
+      }
+      
+      return false;
+    });
+
+    console.log('Filtered PDF/Aviation Links:', pdfLinks);
+
+    if (pdfLinks.length === 0) {
       alert('No PDF URLs detected. Make sure the pasted text contains PDF links or hyperlinks.');
       return;
     }
@@ -162,16 +199,12 @@ document.addEventListener('DOMContentLoaded', () => {
     summariesResults = [];
     exportAllBtn.disabled = true;
     
-    queue = pdfUrls.map((url, index) => {
-      // Find the anchor element safely by comparing decoded/resolved hrefs
-      const anchorEl = Array.from(emailInput.querySelectorAll('a')).find(a => {
-        return a.href === url || decodeURIComponent(a.href) === decodeURIComponent(url);
-      });
-      const linkText = anchorEl ? anchorEl.textContent.trim() : '';
+    queue = pdfLinks.map((link, index) => {
       return {
         id: index,
-        url: url,
-        name: linkText || getFileName(url),
+        url: link.url,
+        name: link.text || getFileName(link.url),
+        linkText: link.text || '',
         status: 'pending', // pending, active, completed, failed
         error: '',
         summary: ''
@@ -214,14 +247,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const arrayBuffer = await response.arrayBuffer();
 
         // Determine if it is an AIP Amendment based on URL and Link Text
-        const anchorEl = Array.from(emailInput.querySelectorAll('a')).find(a => {
-          return a.href === item.url || decodeURIComponent(a.href) === decodeURIComponent(item.url);
-        });
-        const linkText = anchorEl ? anchorEl.textContent.toLowerCase() : '';
+        const linkTextLower = item.linkText.toLowerCase();
         const lowerUrl = item.url.toLowerCase();
         
         const isAmendment = lowerUrl.includes('amdt') || lowerUrl.includes('amendment') || 
-                            linkText.includes('amdt') || linkText.includes('amendment');
+                            linkTextLower.includes('amdt') || linkTextLower.includes('amendment');
         
         let summary = '';
         
