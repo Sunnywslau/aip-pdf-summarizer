@@ -107,9 +107,37 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Extract raw text URLs
-    const urlRegex = /https?:\/\/[^\s\r\n\t"']+/g;
-    const matches = text.match(urlRegex) || [];
+    // Extract raw text URLs (handling potential spaces in filenames like "SUP 65/26.pdf" and trailing query parameters)
+    const matches = [];
+    const lines = text.split('\n');
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      const match = trimmed.match(/(https?:\/\/[^\r\n\t"']+)/i);
+      if (match) {
+        let potentialUrl = match[1];
+        const lowerLine = trimmed.toLowerCase();
+        const pdfIndex = lowerLine.indexOf('.pdf');
+        
+        if (pdfIndex !== -1) {
+          const httpIndex = lowerLine.indexOf('http');
+          // Find the first space after the .pdf extension to capture any trailing query parameters (e.g. ?token=123)
+          const afterPdf = trimmed.substring(pdfIndex + 4);
+          const spaceIndex = afterPdf.indexOf(' ');
+          if (spaceIndex !== -1) {
+            potentialUrl = trimmed.substring(httpIndex, pdfIndex + 4 + spaceIndex);
+          } else {
+            potentialUrl = trimmed.substring(httpIndex);
+          }
+        } else {
+          // If no .pdf, cut off at the first space as standard URL behavior
+          const spaceIndex = potentialUrl.indexOf(' ');
+          if (spaceIndex !== -1) {
+            potentialUrl = potentialUrl.substring(0, spaceIndex);
+          }
+        }
+        matches.push(potentialUrl.trim());
+      }
+    });
 
     // Extract rich-text hyperlinks from pasted HTML
     const anchorHrefs = Array.from(emailInput.querySelectorAll('a')).map(a => a.href);
@@ -135,7 +163,10 @@ document.addEventListener('DOMContentLoaded', () => {
     exportAllBtn.disabled = true;
     
     queue = pdfUrls.map((url, index) => {
-      const anchorEl = emailInput.querySelector(`a[href="${url}"]`);
+      // Find the anchor element safely by comparing decoded/resolved hrefs
+      const anchorEl = Array.from(emailInput.querySelectorAll('a')).find(a => {
+        return a.href === url || decodeURIComponent(a.href) === decodeURIComponent(url);
+      });
       const linkText = anchorEl ? anchorEl.textContent.trim() : '';
       return {
         id: index,
@@ -183,7 +214,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const arrayBuffer = await response.arrayBuffer();
 
         // Determine if it is an AIP Amendment based on URL and Link Text
-        const anchorEl = emailInput.querySelector(`a[href="${item.url}"]`);
+        const anchorEl = Array.from(emailInput.querySelectorAll('a')).find(a => {
+          return a.href === item.url || decodeURIComponent(a.href) === decodeURIComponent(item.url);
+        });
         const linkText = anchorEl ? anchorEl.textContent.toLowerCase() : '';
         const lowerUrl = item.url.toLowerCase();
         
