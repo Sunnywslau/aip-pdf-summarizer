@@ -161,11 +161,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         emailInput.innerHTML = formattedText;
         
-        // Auto trigger processing after a short timeout so user sees it
-        setTimeout(() => {
-          processBtn.click();
-        }, 800);
-        
         // Clean storage item immediately
         chrome.storage.local.remove('importQueue');
       }

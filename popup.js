@@ -481,15 +481,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (isHkAis) {
       // Tier 2: HK CAD specific adapter (looks for Latest Publications list items)
+      const seenUrls = new Set();
       filtered = links.filter(link => {
+        if (!link.url) return false;
         // Normalize any non-breaking spaces or whitespace sequences in text
         const text = link.text.toLowerCase().replace(/\s+/g, ' ');
         
+        if (seenUrls.has(link.url)) return false;
+
         // Match standard HK CAD list item text headers (AIP AMDT, AIP SUP, AIC)
         // Also support "Complete Amendment", "Amendment" and "PDF Version" keywords
         const isAipDoc = text.includes('aip amdt') || text.includes('aip sup') || text.includes('aic') || 
                          text.includes('complete amendment') || text.includes('amendment');
-        return isAipDoc;
+        if (isAipDoc) {
+          seenUrls.add(link.url);
+          return true;
+        }
+        return false;
       });
     }
 
@@ -561,7 +569,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     extractorPanel.style.display = 'block';
-    aiSelectorGroup.style.display = 'none';
     summarizeBtn.style.display = 'none';
   }
 

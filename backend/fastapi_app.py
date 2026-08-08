@@ -51,7 +51,7 @@ async def analyze_document(
 
     try:
         pdf_bytes = await file.read()
-        res_dict = agent.analyze_aip(
+        res_dict = await agent.analyze_aip(
             pdf_bytes,
             user_api_key=x_gemini_api_key,
             user_deepseek_key=x_deepseek_api_key,

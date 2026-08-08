@@ -3,6 +3,7 @@ import time
 import logging
 import fitz
 import httpx
+import asyncio
 from typing import Optional
 from utils.change_bar_detector import detect_change_bars, get_change_bar_spans, get_annotated_text
 from utils.section_classifier import classify_page
@@ -16,7 +17,7 @@ GEMINI_ENDPOINT_TEMPLATE = (
 
 
 class IntelAgent:
-    def analyze_aip(
+    async def analyze_aip(
         self,
         pdf_bytes: bytes,
         user_api_key: Optional[str] = None,       # Gemini key (legacy / default)
@@ -191,17 +192,9 @@ If no runway changes are found, please state "No runway data changes detected.".
 Here is the text to analyze:
 {runway_text_content}
 """
-                runway_report = self._call_llm(
-                    prompt=runway_prompt,
-                    provider=provider,
-                    api_key=active_key,
-                    model_name=model_name,
-                )
-            else:
-                runway_report = "No runway data changes detected."
 
-            # Step 3b: Analyze Procedure Changes
-            procedure_report = ""
+            # Step 3b: Prepare Procedure prompt
+            proc_prompt = ""
             if procedure_pages:
                 proc_text_content = ""
                 for p in procedure_pages:
@@ -237,13 +230,36 @@ If no procedure changes are found, please state "No procedure changes detected."
 Here is the text to analyze:
 {proc_text_content}
 """
-                procedure_report = self._call_llm(
+
+            # Run LLM calls concurrently
+            runway_task = None
+            if runway_pages:
+                runway_task = self._call_llm(
+                    prompt=runway_prompt,
+                    provider=provider,
+                    api_key=active_key,
+                    model_name=model_name,
+                )
+
+            procedure_task = None
+            if procedure_pages:
+                procedure_task = self._call_llm(
                     prompt=proc_prompt,
                     provider=provider,
                     api_key=active_key,
                     model_name=model_name,
                 )
+
+            if runway_task and procedure_task:
+                runway_report, procedure_report = await asyncio.gather(runway_task, procedure_task)
+            elif runway_task:
+                runway_report = await runway_task
+                procedure_report = "No procedure changes detected."
+            elif procedure_task:
+                runway_report = "No runway data changes detected."
+                procedure_report = await procedure_task
             else:
+                runway_report = "No runway data changes detected."
                 procedure_report = "No procedure changes detected."
 
             # Step 4: Consolidate
@@ -273,14 +289,14 @@ Here is the text to analyze:
                 "model_used": "Error"
             }
 
-    def _call_llm(self, prompt: str, provider: str, api_key: str, model_name: str) -> str:
-        """Synchronous LLM call — routes to DeepSeek or Gemini based on provider."""
+    async def _call_llm(self, prompt: str, provider: str, api_key: str, model_name: str) -> str:
+        """Asynchronous LLM call — routes to DeepSeek or Gemini based on provider."""
         if provider == "deepseek":
-            return self._call_deepseek(prompt, api_key, model_name)
+            return await self._call_deepseek(prompt, api_key, model_name)
         else:
-            return self._call_gemini(prompt, api_key, model_name)
+            return await self._call_gemini(prompt, api_key, model_name)
 
-    def _call_deepseek(self, prompt: str, api_key: str, model_name: str) -> str:
+    async def _call_deepseek(self, prompt: str, api_key: str, model_name: str) -> str:
         payload = {
             "model": model_name,
             "messages": [{"role": "user", "content": prompt}],
@@ -288,25 +304,33 @@ Here is the text to analyze:
         retryable = {429, 503, 502, 504}
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
-            with httpx.Client(timeout=180) as client:
-                res = client.post(
-                    DEEPSEEK_ENDPOINT,
-                    json=payload,
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {api_key}",
-                    },
-                )
-            if res.is_success:
-                return res.json()["choices"][0]["message"]["content"]
-            if res.status_code in retryable and attempt < max_attempts:
-                wait = 2 ** attempt  # 2s, 4s
-                logger.warning(f"DeepSeek {res.status_code} on attempt {attempt}, retrying in {wait}s...")
-                time.sleep(wait)
-                continue
-            raise RuntimeError(f"DeepSeek API Error: {res.status_code} — {res.text}")
+            try:
+                async with httpx.AsyncClient(timeout=60) as client:
+                    res = await client.post(
+                        DEEPSEEK_ENDPOINT,
+                        json=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {api_key}",
+                        },
+                    )
+                if res.is_success:
+                    return res.json()["choices"][0]["message"]["content"]
+                if res.status_code in retryable and attempt < max_attempts:
+                    wait = 2 ** attempt  # 2s, 4s
+                    logger.warning(f"DeepSeek {res.status_code} on attempt {attempt}, retrying in {wait}s...")
+                    await asyncio.sleep(wait)
+                    continue
+                raise RuntimeError(f"DeepSeek API Error: {res.status_code} — {res.text}")
+            except (httpx.TimeoutException, httpx.NetworkError) as e:
+                if attempt < max_attempts:
+                    wait = 2 ** attempt
+                    logger.warning(f"DeepSeek network/timeout error '{e}' on attempt {attempt}, retrying in {wait}s...")
+                    await asyncio.sleep(wait)
+                    continue
+                raise RuntimeError(f"DeepSeek connection failed: {e}")
 
-    def _call_gemini(self, prompt: str, api_key: str, model_name: str) -> str:
+    async def _call_gemini(self, prompt: str, api_key: str, model_name: str) -> str:
         endpoint = GEMINI_ENDPOINT_TEMPLATE.format(model=model_name, key=api_key)
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
@@ -314,17 +338,25 @@ Here is the text to analyze:
         retryable = {429, 503, 502, 504}
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
-            with httpx.Client(timeout=180) as client:
-                res = client.post(
-                    endpoint,
-                    json=payload,
-                    headers={"Content-Type": "application/json"},
-                )
-            if res.is_success:
-                return res.json()["candidates"][0]["content"]["parts"][0]["text"]
-            if res.status_code in retryable and attempt < max_attempts:
-                wait = 2 ** attempt  # 2s, 4s
-                logger.warning(f"Gemini {res.status_code} on attempt {attempt}, retrying in {wait}s...")
-                time.sleep(wait)
-                continue
-            raise RuntimeError(f"Gemini API Error: {res.status_code} — {res.text}")
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    res = await client.post(
+                        endpoint,
+                        json=payload,
+                        headers={"Content-Type": "application/json"},
+                    )
+                if res.is_success:
+                    return res.json()["candidates"][0]["content"]["parts"][0]["text"]
+                if res.status_code in retryable and attempt < max_attempts:
+                    wait = 2 ** attempt  # 2s, 4s
+                    logger.warning(f"Gemini {res.status_code} on attempt {attempt}, retrying in {wait}s...")
+                    await asyncio.sleep(wait)
+                    continue
+                raise RuntimeError(f"Gemini API Error: {res.status_code} — {res.text}")
+            except (httpx.TimeoutException, httpx.NetworkError) as e:
+                if attempt < max_attempts:
+                    wait = 2 ** attempt
+                    logger.warning(f"Gemini network/timeout error '{e}' on attempt {attempt}, retrying in {wait}s...")
+                    await asyncio.sleep(wait)
+                    continue
+                raise RuntimeError(f"Gemini connection failed: {e}")
