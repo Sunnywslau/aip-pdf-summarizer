@@ -107,10 +107,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    console.log('--- Batch Processing Debug ---');
-    console.log('Raw HTML pasted:', emailInput.innerHTML);
-    console.log('Raw Text parsed:', text);
-
     // Extract raw text URLs (handling potential spaces in filenames like "SUP 65/26.pdf" and trailing query parameters)
     const matches = [];
     const lines = text.split('\n');
@@ -162,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const lowerText = link.text.toLowerCase();
       
       // 1. Keep if URL indicates it is a PDF
-      if (lowerUrl.endsWith('.pdf') || lowerUrl.includes('/pdf') || lowerUrl.includes('pdf')) {
+      if (lowerUrl.endsWith('.pdf') || lowerUrl.includes('/pdf/') || lowerUrl.includes('.pdf?') || lowerUrl.includes('/pdfurl/')) {
         return true;
       }
       
@@ -174,8 +170,6 @@ document.addEventListener('DOMContentLoaded', () => {
       
       return false;
     });
-
-    console.log('Filtered PDF/Aviation Links:', pdfLinks);
 
     // Group by URL to combine display names for identical URLs
     const urlGroups = {};
@@ -208,8 +202,6 @@ document.addEventListener('DOMContentLoaded', () => {
         linkText: namesArray.join(', ')
       };
     });
-
-    console.log('Grouped Unique PDF Links:', uniquePdfLinks);
 
     if (uniquePdfLinks.length === 0) {
       alert('No PDF URLs detected. Make sure the pasted text contains PDF links or hyperlinks.');
