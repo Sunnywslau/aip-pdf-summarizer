@@ -100,6 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function setAiMode(mode) {
     aiMode = mode;
+    chrome.storage.local.set({ aiMode: mode });
     updateAiBadge();
   }
 
@@ -170,7 +171,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, (items) => {
     config = items;
     configLoaded = true;
-    updateButtonState();
+    
+    // Load last selected AI mode from local storage
+    chrome.storage.local.get({ aiMode: 'auto' }, (localItems) => {
+      aiMode = localItems.aiMode;
+      updateAiBadge();
+      updateButtonState();
+    });
   });
 
   // Open settings
