@@ -95,4 +95,50 @@ Change bars are graphical lines in margins and do not exist as text characters. 
   * If it contains standard procedure nav-aids or lacks runway drawings ➡️ Routed to **Procedure Changes**.
 * **`AD_OTHER` / `UNKNOWN` (Dual-Nature Pages)**:
   * Scanned for procedure keywords (`proc_keywords`) and runway keywords (`rwy_keywords`).
-  * If it matches both, the page is duplicated and sent to **both Runway and Procedure prompt contexts** to ensure zero data loss.
+* If it matches both, the page is duplicated and sent to **both Runway and Procedure prompt contexts** to ensure zero data loss.
+
+---
+
+## 5. Smart Link Extractor (Client-Side eAIP Resolver)
+**Objective**: Automate the discovery and conversion of HTML-based publications (such as eAIP index/frameset pages) to direct printable PDF packages on the client-side.
+
+### A. Recursive Frameset Crawler:
+Eurocontrol-style eAIP publications typically use a `<frameset>` structure containing separate navigation and cover documents. A standard top-level DOM search yields 0 link nodes. The extension injects a recursive frame-crawler:
+1. Scan the top-level document: `document.querySelectorAll('a[href]')`.
+2. Inspect `window.frames`. If active, iterate through same-origin frame documents recursively.
+3. Normalize all Whitespace characters: Replace non-breaking spaces (`\u00a0` or `&nbsp;`) and carriage returns with a single space ` ` (`.replace(/\s+/g, ' ')`) to prevent title keyword mismatching.
+
+### B. Two-Tier Document Filtering:
+* **Tier 2 (Portal Specific)**: On `ais.gov.hk`, it parses and filters links strictly by text headers containing `AIP AMDT`, `AIP SUP`, `AIC`, `Complete Amendment`, or `Amendment`. It deduplicates items by URL to avoid multi-layout listing.
+* **Tier 1 (Generic Fallback)**: On other AIP domains, it scans links matching `.pdf` or eAIP keywords (`sup`, `aic`, `amdt`, `amendment`, `pdf`, `aip`, `circular`, `supplement`), filtering duplicates.
+
+### C. Background Cover-Sheet Resolution:
+When an HTML-based eAIP landing URL is selected, the extension executes a background asynchronous fetch resolution:
+1. Fetch the target HTML content.
+2. If the HTML text defines a `<frameset>`, scan all `<frame src="...">` tags.
+3. Locate the frame that contains `cover` in its source URL (defaulting to the last frame if none matches) and fetch that child cover document instead.
+4. Scan the cover document for target `.pdf` patterns, prioritizing those matching `amdt`, `complete`, or `eaip`.
+5. Reconstruct the absolute URL of the PDF relative to the cover frame page context and substitute the HTML link with this resolved PDF link before displaying the queue checklist.
+
+---
+
+## 6. Asynchronous Backend Parallelization & Fast-Fail Timeout
+**Objective**: Minimize LLM latency during deep document reviews and prevent interface hanging caused by network proxy delays or large prompts.
+
+### A. Asynchronous Runway and Procedure LLM Queries:
+Instead of calling LLM endpoints sequentially, the backend `IntelAgent.analyze_aip` method uses `asyncio.gather` to trigger Runway Analysis and Procedure Analysis concurrently:
+```python
+runway_task = self._call_llm(prompt=runway_prompt, ...) if runway_pages else None
+procedure_task = self._call_llm(prompt=proc_prompt, ...) if procedure_pages else None
+
+if runway_task and procedure_task:
+    runway_report, procedure_report = await asyncio.gather(runway_task, procedure_task)
+```
+* **Impact**: Decreases server-side AI processing time by up to **50%** when processing large dual-content amendments.
+
+### B. Fast-Fail Client Timeout (DeepSeek):
+To handle corporate network proxy bottlenecks or large prompts:
+1. DeepSeek client timeout is capped at **60 seconds** (down from 180s).
+2. Catches `httpx.TimeoutException` and network errors during backoff cycles.
+3. Employs non-blocking `await asyncio.sleep` to release the FastAPI thread pool while waiting for retry backoffs (2s, 4s).
+4. If the proxy fails, it fails fast and returns a clear exception to prevent the browser popup from waiting indefinitely.
