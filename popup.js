@@ -427,11 +427,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       let htmlText = await res.text();
       let contextUrl = htmlUrl;
 
-      // Check if it's a frameset page and recursively load the cover frame content
-      const frameRegex = /<frame[^>]+src=["']([^"']*(?:cover|index|menu)[^"']*)["']/i;
-      const frameMatch = frameRegex.exec(htmlText) || /<frame[^>]+src=["']([^"']+)["']/i.exec(htmlText);
-      if (frameMatch) {
-        const coverUrl = new URL(frameMatch[1], htmlUrl).href;
+      // Extract all frame src attributes
+      const frameRegex = /<frame[^>]+src=["']([^"']+)["']/gi;
+      let match;
+      const frameSrcs = [];
+      while ((match = frameRegex.exec(htmlText)) !== null) {
+        frameSrcs.push(match[1]);
+      }
+
+      if (frameSrcs.length > 0) {
+        // Find the frame that contains 'cover' in its src (most specific target)
+        let coverSrc = frameSrcs.find(src => src.toLowerCase().includes('cover'));
+        // Fallback to the last frame (often the main content frame)
+        if (!coverSrc) coverSrc = frameSrcs[frameSrcs.length - 1];
+
+        const coverUrl = new URL(coverSrc, htmlUrl).href;
         const coverRes = await fetch(coverUrl);
         if (coverRes.ok) {
           htmlText = await coverRes.text();
@@ -441,11 +451,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       // Parse links from HTML text
       const pdfRegex = /href=["']([^"']+\.pdf(?:[^"']*)?)["']/gi;
-      let match;
+      let pdfMatch;
       const pdfUrls = [];
-      while ((match = pdfRegex.exec(htmlText)) !== null) {
+      while ((pdfMatch = pdfRegex.exec(htmlText)) !== null) {
         try {
-          const absolute = new URL(match[1], contextUrl).href;
+          const absolute = new URL(pdfMatch[1], contextUrl).href;
           pdfUrls.push(absolute);
         } catch (e) {}
       }
@@ -472,7 +482,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (isHkAis) {
       // Tier 2: HK CAD specific adapter (looks for Latest Publications list items)
       filtered = links.filter(link => {
-        const text = link.text.toLowerCase();
+        // Normalize any non-breaking spaces or whitespace sequences in text
+        const text = link.text.toLowerCase().replace(/\s+/g, ' ');
         
         // Match standard HK CAD list item text headers (AIP AMDT, AIP SUP, AIC)
         // Also support "Complete Amendment", "Amendment" and "PDF Version" keywords
@@ -488,7 +499,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       filtered = links.filter(link => {
         if (!link.url) return false;
         const lowerUrl = link.url.toLowerCase();
-        const lowerText = link.text.toLowerCase();
+        // Normalize space in generic comparison too
+        const lowerText = link.text.toLowerCase().replace(/\s+/g, ' ');
         
         if (seenUrls.has(link.url)) return false;
 
