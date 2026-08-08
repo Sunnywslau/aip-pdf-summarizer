@@ -208,9 +208,40 @@ document.addEventListener('DOMContentLoaded', async () => {
           return;
         }
 
-        urlDisplay.textContent = `AIP Page: ${new URL(url).hostname}`;
-        urlDisplay.style.borderColor = 'rgba(16, 185, 129, 0.4)'; // green border
-        renderExtractedLinks(filteredLinks);
+        urlDisplay.textContent = "Resolving document links...";
+        
+        // Resolve HTML eAIP folder links to their PDF targets
+        const resolvePromises = filteredLinks.map(async (link) => {
+          const lowerUrl = link.url.toLowerCase();
+          const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('/pdf/') || lowerUrl.includes('.pdf?') || lowerUrl.includes('/pdfurl/');
+          
+          if (!isPdf) {
+            const resolvedUrl = await resolveAipAmdtPdf(link.url);
+            return {
+              ...link,
+              url: resolvedUrl
+            };
+          }
+          return link;
+        });
+
+        Promise.all(resolvePromises).then((resolvedLinks) => {
+          // Filter out links that failed to resolve to a PDF link (if they still end in .html)
+          const validPdfLinks = resolvedLinks.filter(link => {
+            const lower = link.url.toLowerCase();
+            return lower.endsWith('.pdf') || lower.includes('/pdf/') || lower.includes('.pdf?') || lower.includes('/pdfurl/');
+          });
+
+          if (validPdfLinks.length === 0) {
+            urlDisplay.textContent = `${currentTabUrl} (Failed to find PDF versions)`;
+            urlDisplay.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+            return;
+          }
+
+          urlDisplay.textContent = `AIP Page: ${new URL(url).hostname}`;
+          urlDisplay.style.borderColor = 'rgba(16, 185, 129, 0.4)'; // green border
+          renderExtractedLinks(validPdfLinks);
+        });
       });
     }
     
@@ -356,6 +387,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
   }
 
+  async function resolveAipAmdtPdf(htmlUrl) {
+    try {
+      const res = await fetch(htmlUrl);
+      if (!res.ok) return htmlUrl;
+      const htmlText = await res.text();
+      
+      // Parse links from HTML text
+      const pdfRegex = /href=["']([^"']+\.pdf(?:[^"']*)?)["']/gi;
+      let match;
+      const pdfUrls = [];
+      while ((match = pdfRegex.exec(htmlText)) !== null) {
+        try {
+          const absolute = new URL(match[1], htmlUrl).href;
+          pdfUrls.push(absolute);
+        } catch (e) {}
+      }
+      
+      if (pdfUrls.length === 0) return htmlUrl;
+      
+      // Find the best match: prefer one that has "amdt", "complete", "pkg", or "eaip" in it
+      const bestMatch = pdfUrls.find(url => {
+        const lower = url.toLowerCase();
+        return lower.includes('amdt') || lower.includes('complete') || lower.includes('eaip');
+      });
+      
+      return bestMatch || pdfUrls[0];
+    } catch (err) {
+      console.error("Failed to resolve HTML eAIP link:", err);
+      return htmlUrl;
+    }
+  }
+
   function filterAipLinks(pageUrl, links) {
     const isHkAis = pageUrl.toLowerCase().includes('ais.gov.hk');
     let filtered = [];
@@ -366,9 +429,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const text = link.text.toLowerCase();
         const url = link.url.toLowerCase();
         
-        // Ensure it's a PDF link
+        // Match PDF links OR HTML eAIP folder links
         const isPdf = url.endsWith('.pdf') || url.includes('/pdf/') || url.includes('.pdf?') || url.includes('/pdfurl/');
-        if (!isPdf) return false;
+        const isHtmlEaip = url.includes('/eaip/') && (url.endsWith('.html') || url.endsWith('/') || url.includes('history') || url.includes('index'));
+        if (!isPdf && !isHtmlEaip) return false;
         
         // Match standard HK CAD list item text headers (AIP AMDT, AIP SUP, AIC)
         const isAipDoc = text.includes('aip amdt') || text.includes('aip sup') || text.includes('aic');
@@ -387,7 +451,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (seenUrls.has(link.url)) return false;
 
         const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('/pdf/') || lowerUrl.includes('.pdf?') || lowerUrl.includes('/pdfurl/');
-        if (!isPdf) return false;
+        const isHtmlEaip = lowerUrl.includes('/eaip/') && (lowerUrl.endsWith('.html') || lowerUrl.endsWith('/') || lowerUrl.includes('history') || lowerUrl.includes('index'));
+        if (!isPdf && !isHtmlEaip) return false;
 
         const keywords = ['sup', 'aic', 'amdt', 'amendment', 'pdf', 'aip', 'circular', 'supplement'];
         const matchesKeyword = keywords.some(kw => lowerUrl.includes(kw) || lowerText.includes(kw));
