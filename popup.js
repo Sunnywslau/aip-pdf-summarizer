@@ -429,14 +429,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         const text = link.text.toLowerCase();
         const url = link.url.toLowerCase();
         
-        // Match PDF links OR HTML eAIP folder links
-        const isPdf = url.endsWith('.pdf') || url.includes('/pdf/') || url.includes('.pdf?') || url.includes('/pdfurl/');
-        const isHtmlEaip = url.includes('/eaip/') && (url.endsWith('.html') || url.endsWith('/') || url.includes('history') || url.includes('index'));
-        if (!isPdf && !isHtmlEaip) return false;
-        
         // Match standard HK CAD list item text headers (AIP AMDT, AIP SUP, AIC)
         const isAipDoc = text.includes('aip amdt') || text.includes('aip sup') || text.includes('aic');
-        return isAipDoc;
+        if (!isAipDoc) return false;
+        
+        // Match PDF links OR HTML eAIP folder links (which contain hkaip, eaip, amdt, history, or index)
+        const isPdf = url.endsWith('.pdf') || url.includes('/pdf/') || url.includes('.pdf?') || url.includes('/pdfurl/');
+        const isHtmlEaip = url.includes('/eaip/') || url.includes('/hkaip/') || url.includes('amdt') || url.includes('history') || url.includes('index') || url.endsWith('.html') || url.endsWith('/');
+        
+        return isPdf || isHtmlEaip;
       });
     }
 
@@ -451,7 +452,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (seenUrls.has(link.url)) return false;
 
         const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('/pdf/') || lowerUrl.includes('.pdf?') || lowerUrl.includes('/pdfurl/');
-        const isHtmlEaip = lowerUrl.includes('/eaip/') && (lowerUrl.endsWith('.html') || lowerUrl.endsWith('/') || lowerUrl.includes('history') || lowerUrl.includes('index'));
+        const isHtmlEaip = (lowerUrl.includes('/eaip/') || lowerUrl.includes('/hkaip/') || lowerUrl.includes('/amdt/')) && 
+                           (lowerUrl.endsWith('.html') || lowerUrl.endsWith('/') || lowerUrl.includes('history') || lowerUrl.includes('index'));
         if (!isPdf && !isHtmlEaip) return false;
 
         const keywords = ['sup', 'aic', 'amdt', 'amendment', 'pdf', 'aip', 'circular', 'supplement'];
