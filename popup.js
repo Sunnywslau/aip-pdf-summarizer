@@ -185,8 +185,33 @@ document.addEventListener('DOMContentLoaded', async () => {
                   tab.title.toLowerCase().endsWith('.pdf');
                   
     if (!isPdf) {
-      urlDisplay.textContent = `${currentTabUrl} (Not detected as PDF)`;
-      urlDisplay.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+      urlDisplay.textContent = "Scanning page for documents...";
+      
+      // Inject content script to scan DOM
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: scanPageForLinks
+      }, (results) => {
+        if (chrome.runtime.lastError || !results || !results[0]) {
+          console.error("Failed to inject script: ", chrome.runtime.lastError);
+          urlDisplay.textContent = `${currentTabUrl} (Not detected as PDF)`;
+          urlDisplay.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+          return;
+        }
+
+        const { url, links } = results[0].result;
+        const filteredLinks = filterAipLinks(url, links);
+
+        if (filteredLinks.length === 0) {
+          urlDisplay.textContent = `${currentTabUrl} (No publications detected)`;
+          urlDisplay.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+          return;
+        }
+
+        urlDisplay.textContent = `AIP Page: ${new URL(url).hostname}`;
+        urlDisplay.style.borderColor = 'rgba(16, 185, 129, 0.4)'; // green border
+        renderExtractedLinks(filteredLinks);
+      });
     }
     
     tabLoaded = true;
@@ -310,6 +335,124 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+
+  function scanPageForLinks() {
+    const anchors = Array.from(document.querySelectorAll('a[href]'));
+    const links = anchors.map(a => {
+      let absoluteUrl = '';
+      try {
+        absoluteUrl = new URL(a.getAttribute('href'), document.baseURI).href;
+      } catch(e) {
+        absoluteUrl = a.href;
+      }
+      return {
+        url: absoluteUrl.replace(/\\/g, '/'),
+        text: a.textContent.trim()
+      };
+    });
+    return {
+      url: window.location.href,
+      links: links
+    };
+  }
+
+  function filterAipLinks(pageUrl, links) {
+    const isHkAis = pageUrl.toLowerCase().includes('ais.gov.hk');
+    let filtered = [];
+
+    if (isHkAis) {
+      // Tier 2: HK CAD specific adapter (looks for Latest Publications list items)
+      filtered = links.filter(link => {
+        const text = link.text.toLowerCase();
+        const url = link.url.toLowerCase();
+        
+        // Ensure it's a PDF link
+        const isPdf = url.endsWith('.pdf') || url.includes('/pdf/') || url.includes('.pdf?') || url.includes('/pdfurl/');
+        if (!isPdf) return false;
+        
+        // Match standard HK CAD list item text headers (AIP AMDT, AIP SUP, AIC)
+        const isAipDoc = text.includes('aip amdt') || text.includes('aip sup') || text.includes('aic');
+        return isAipDoc;
+      });
+    }
+
+    // Tier 1: Generic scanner (fallback if HK CAD returned empty or if it's another country)
+    if (filtered.length === 0) {
+      const seenUrls = new Set();
+      filtered = links.filter(link => {
+        if (!link.url) return false;
+        const lowerUrl = link.url.toLowerCase();
+        const lowerText = link.text.toLowerCase();
+        
+        if (seenUrls.has(link.url)) return false;
+
+        const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('/pdf/') || lowerUrl.includes('.pdf?') || lowerUrl.includes('/pdfurl/');
+        if (!isPdf) return false;
+
+        const keywords = ['sup', 'aic', 'amdt', 'amendment', 'pdf', 'aip', 'circular', 'supplement'];
+        const matchesKeyword = keywords.some(kw => lowerUrl.includes(kw) || lowerText.includes(kw));
+
+        if (matchesKeyword) {
+          seenUrls.add(link.url);
+          return true;
+        }
+        return false;
+      });
+    }
+
+    return filtered;
+  }
+
+  const extractorPanel = document.getElementById('extractorPanel');
+  const extractedLinksList = document.getElementById('extractedLinksList');
+  const aiSelectorGroup = document.getElementById('aiSelectorGroup');
+  const importSelectedBtn = document.getElementById('importSelectedBtn');
+  let selectedLinks = [];
+
+  function renderExtractedLinks(links) {
+    extractedLinksList.innerHTML = '';
+    selectedLinks = [...links]; // Default select all
+    
+    links.forEach((link, idx) => {
+      const itemEl = document.createElement('div');
+      itemEl.className = 'extractor-link-item';
+      const checkboxId = `chk-link-${idx}`;
+      
+      itemEl.innerHTML = `
+        <input type="checkbox" id="${checkboxId}" checked style="cursor: pointer;">
+        <div style="flex: 1; cursor: pointer;">
+          <label for="${checkboxId}" class="extractor-link-label" style="cursor: pointer;">${link.text || 'Untitled Document'}</label>
+          <span class="extractor-link-url" title="${link.url}">${link.url}</span>
+        </div>
+      `;
+      
+      itemEl.querySelector('input').addEventListener('change', (e) => {
+        if (e.target.checked) {
+          if (!selectedLinks.some(l => l.url === link.url)) {
+            selectedLinks.push(link);
+          }
+        } else {
+          selectedLinks = selectedLinks.filter(l => l.url !== link.url);
+        }
+        importSelectedBtn.disabled = selectedLinks.length === 0;
+      });
+      
+      extractedLinksList.appendChild(itemEl);
+    });
+
+    extractorPanel.style.display = 'block';
+    aiSelectorGroup.style.display = 'none';
+    summarizeBtn.style.display = 'none';
+  }
+
+  importSelectedBtn.addEventListener('click', () => {
+    if (selectedLinks.length === 0) return;
+    chrome.storage.local.set({
+      importQueue: selectedLinks
+    }, () => {
+      chrome.tabs.create({ url: 'batch.html' });
+    });
+  });
 
   function showStatus(text) {
     statusContainer.style.display = 'flex';

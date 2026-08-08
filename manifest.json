@@ -5,7 +5,8 @@
   "description": "Reads and summarizes AIP SUP and AIC PDF documents using Gemini AI.",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "scripting"
   ],
   "host_permissions": [
     "https://generativelanguage.googleapis.com/*",

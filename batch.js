@@ -147,6 +147,34 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   loadConfig();
 
+  // Check if there are links imported from a portal page
+  function checkImportQueue() {
+    chrome.storage.local.get(['importQueue'], (result) => {
+      if (result.importQueue && result.importQueue.length > 0) {
+        // Pre-populate input area
+        const formattedText = result.importQueue.map(item => {
+          if (item.text) {
+            return `<a href="${item.url}">${item.text}</a>`;
+          }
+          return item.url;
+        }).join('\n');
+        
+        emailInput.innerHTML = formattedText;
+        
+        // Auto trigger processing after a short timeout so user sees it
+        setTimeout(() => {
+          processBtn.click();
+        }, 800);
+        
+        // Clean storage item immediately
+        chrome.storage.local.remove('importQueue');
+      }
+    });
+  }
+  
+  // Delay check slightly to ensure config is loaded and buttons are fully wired
+  setTimeout(checkImportQueue, 300);
+
   settingsBtn.addEventListener('click', () => {
     chrome.runtime.openOptionsPage();
   });
