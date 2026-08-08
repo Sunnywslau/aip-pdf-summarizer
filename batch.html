@@ -314,6 +314,86 @@
       display: flex;
       gap: 8px;
     }
+
+    /* AI Selector */
+    .ai-selector {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+
+    .ai-selector label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+
+    .ai-toggle {
+      display: flex;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .ai-toggle-btn {
+      flex: 1;
+      padding: 6px 8px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .ai-toggle-btn:hover {
+      border-color: var(--primary);
+      color: var(--text-color);
+    }
+
+    .ai-toggle-btn.active-deepseek {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: #10b981;
+      color: #34d399;
+    }
+
+    .ai-toggle-btn.active-gemini {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: #3b82f6;
+      color: #60a5fa;
+    }
+
+    .ai-badge {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+
+    .badge-deepseek {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid #10b981;
+    }
+
+    .badge-gemini {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+      border: 1px solid #3b82f6;
+    }
+
+    .badge-none {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border: 1px solid #ef4444;
+    }
   </style>
   <script src="pdf.min.js"></script>
 </head>
@@ -331,6 +411,17 @@
       <div class="form-group">
         <label for="emailInput">Paste Email Content or PDF URL list:</label>
         <div id="emailInput" contenteditable="true" placeholder="Paste the text containing AIP SUP/AIC PDF URLs here..."></div>
+      </div>
+
+      <!-- AI Provider Quick Selector -->
+      <div class="ai-selector" style="margin-top: 8px;">
+        <label>AI Engine:</label>
+        <div class="ai-toggle">
+          <button class="ai-toggle-btn" id="aiAutoBtn" title="Use DeepSeek if key available, otherwise Gemini">Auto</button>
+          <button class="ai-toggle-btn" id="aiDeepSeekBtn" title="Force DeepSeek">DeepSeek</button>
+          <button class="ai-toggle-btn" id="aiGeminiBtn" title="Force Gemini">Gemini</button>
+        </div>
+        <span id="aiBadge" class="ai-badge badge-none">No key</span>
       </div>
 
       <button id="processBtn" class="btn-primary">

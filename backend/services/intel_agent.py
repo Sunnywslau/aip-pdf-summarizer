@@ -21,7 +21,7 @@ class IntelAgent:
         pdf_bytes: bytes,
         user_api_key: Optional[str] = None,       # Gemini key (legacy / default)
         user_deepseek_key: Optional[str] = None,  # DeepSeek key
-    ) -> str:
+    ) -> dict:
         """
         Analyzes AIP PDF bytes using Change Bar detection + page classification,
         then calls either DeepSeek or Gemini depending on which key is supplied.
@@ -38,10 +38,10 @@ class IntelAgent:
             model_name = "gemini-3.5-flash"
 
         if not active_key:
-            return (
-                "Error: No API Key provided. "
-                "Please set a Gemini or DeepSeek API Key in the Extension Settings."
-            )
+            return {
+                "analysis": "Error: No API Key provided. Please set a Gemini or DeepSeek API Key in the Extension Settings.",
+                "model_used": "Unknown"
+            }
 
         try:
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -263,9 +263,15 @@ Here is the text to analyze:
 ## 2. Instrument Procedure Changes (SID / STAR / IAP)
 {procedure_report}
 """
-            return analysis_md
+            return {
+                "analysis": analysis_md,
+                "model_used": provider_label
+            }
         except Exception as e:
-            return f"Error during AI analysis: {e}"
+            return {
+                "analysis": f"Error during AI analysis: {e}",
+                "model_used": "Error"
+            }
 
     def _call_llm(self, prompt: str, provider: str, api_key: str, model_name: str) -> str:
         """Synchronous LLM call — routes to DeepSeek or Gemini based on provider."""

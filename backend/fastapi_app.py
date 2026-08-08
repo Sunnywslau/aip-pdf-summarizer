@@ -51,14 +51,15 @@ async def analyze_document(
 
     try:
         pdf_bytes = await file.read()
-        report_text = agent.analyze_aip(
+        res_dict = agent.analyze_aip(
             pdf_bytes,
             user_api_key=x_gemini_api_key,
             user_deepseek_key=x_deepseek_api_key,
         )
         return {
             "filename": file.filename,
-            "analysis": report_text
+            "analysis": res_dict["analysis"],
+            "model_used": res_dict["model_used"]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
@@ -89,13 +90,16 @@ async def analyze_sup(
             detail="Provide at least one of: X-DeepSeek-API-Key or X-Gemini-API-Key header.",
         )
     try:
-        summary = await sup_agent.summarize(
+        res_dict = await sup_agent.summarize(
             text=body.text,
             user_deepseek_key=x_deepseek_api_key,
             user_gemini_key=x_gemini_api_key,
             system_prompt=body.system_prompt,
             model=body.model,
         )
-        return {"summary": summary}
+        return {
+            "summary": res_dict["summary"],
+            "model_used": res_dict["model_used"]
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to summarize document: {str(e)}")

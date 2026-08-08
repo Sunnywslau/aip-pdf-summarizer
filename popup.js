@@ -216,6 +216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                           lowerTitle.includes('amdt') || lowerTitle.includes('amendment');
       
       let summary = '';
+      let modelUsed = '';
       
       if (isAmendment) {
         showStatus('Uploading and analyzing with backend...');
@@ -241,6 +242,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         const data = await res.json();
         summary = data.analysis;
+        modelUsed = data.model_used;
       } else {
         // SUP/AIC: extract text locally, then send to backend for AI processing
         // This routes all AI calls through Hugging Face server, bypassing
@@ -289,11 +291,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const supData = await supRes.json();
         summary = supData.summary;
+        modelUsed = supData.model_used;
       }
 
       // 3. Show Result
       hideStatus();
-      resultContainer.innerHTML = parseMarkdown(summary);
+      let metaHeader = '';
+      if (modelUsed) {
+        metaHeader = `<div style="font-size: 11px; color: var(--text-muted); background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 6px; margin-bottom: 12px; display: inline-block; border: 1px solid var(--border-color); font-weight: 500;">AI Engine: <strong style="color: #60a5fa;">${modelUsed}</strong></div>`;
+      }
+      resultContainer.innerHTML = metaHeader + parseMarkdown(summary);
       resultContainer.style.display = 'block';
     } catch (err) {
       hideStatus();

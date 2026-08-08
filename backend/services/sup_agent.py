@@ -33,28 +33,36 @@ class SupAgent:
         user_gemini_key: str = None,
         system_prompt: str = None,
         model: str = None,
-    ) -> str:
+    ) -> dict:
         prompt = system_prompt or SYSTEM_PROMPT
 
         # Sanitize model name — use provider-appropriate defaults
         # if the passed model belongs to the other provider
         if user_deepseek_key:
             deepseek_model = model if (model and model.startswith('deepseek')) else 'deepseek-v4-flash'
-            return await self._call_deepseek(
+            summary_text = await self._call_deepseek(
                 text=text,
                 api_key=user_deepseek_key,
                 model=deepseek_model,
                 system_prompt=prompt,
             )
+            return {
+                "summary": summary_text,
+                "model_used": f"DeepSeek ({deepseek_model})"
+            }
 
         if user_gemini_key:
             gemini_model = model if (model and 'gemini' in model) else 'gemini-3.5-flash'
-            return await self._call_gemini(
+            summary_text = await self._call_gemini(
                 text=text,
                 api_key=user_gemini_key,
                 model=gemini_model,
                 system_prompt=prompt,
             )
+            return {
+                "summary": summary_text,
+                "model_used": f"Gemini ({gemini_model})"
+            }
 
         raise ValueError(
             "No API key provided. Supply either X-DeepSeek-API-Key or X-Gemini-API-Key header."

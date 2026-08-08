@@ -61,13 +61,72 @@ document.addEventListener('DOMContentLoaded', () => {
   let config = {};
   let queue = [];
   let summariesResults = []; // Stores { url, summaryText }
+  let aiMode = 'auto'; // 'auto' | 'deepseek' | 'gemini'
+
+  // --- AI Selector ---
+  const aiAutoBtn    = document.getElementById('aiAutoBtn');
+  const aiDeepSeekBtn = document.getElementById('aiDeepSeekBtn');
+  const aiGeminiBtn  = document.getElementById('aiGeminiBtn');
+  const aiBadge      = document.getElementById('aiBadge');
+
+  function updateAiBadge() {
+    const hasDeepSeek = !!config.deepseekApiKey;
+    const hasGemini   = !!(config.geminiApiKey || config.apiKey);
+
+    // Determine effective provider
+    let effective = null;
+    if (aiMode === 'deepseek') effective = hasDeepSeek ? 'deepseek' : null;
+    else if (aiMode === 'gemini') effective = hasGemini ? 'gemini' : null;
+    else effective = hasDeepSeek ? 'deepseek' : (hasGemini ? 'gemini' : null); // auto
+
+    // Update badge
+    aiBadge.className = 'ai-badge';
+    if (effective === 'deepseek') {
+      aiBadge.textContent = 'DeepSeek';
+      aiBadge.classList.add('badge-deepseek');
+    } else if (effective === 'gemini') {
+      aiBadge.textContent = 'Gemini';
+      aiBadge.classList.add('badge-gemini');
+    } else {
+      aiBadge.textContent = 'No key';
+      aiBadge.classList.add('badge-none');
+    }
+
+    // Update button active states
+    aiAutoBtn.className    = 'ai-toggle-btn' + (aiMode === 'auto' ? (effective === 'deepseek' ? ' active-deepseek' : ' active-gemini') : '');
+    aiDeepSeekBtn.className = 'ai-toggle-btn' + (aiMode === 'deepseek' ? ' active-deepseek' : '');
+    aiGeminiBtn.className  = 'ai-toggle-btn' + (aiMode === 'gemini' ? ' active-gemini' : '');
+  }
+
+  function setAiMode(mode) {
+    aiMode = mode;
+    updateAiBadge();
+  }
+
+  aiAutoBtn.addEventListener('click',     () => setAiMode('auto'));
+  aiDeepSeekBtn.addEventListener('click', () => setAiMode('deepseek'));
+  aiGeminiBtn.addEventListener('click',   () => setAiMode('gemini'));
+
+  function buildApiHeaders() {
+    const geminiKey   = config.geminiApiKey || config.apiKey;
+    const headers     = {};
+
+    if (aiMode === 'deepseek') {
+      if (config.deepseekApiKey) headers['X-DeepSeek-API-Key'] = config.deepseekApiKey;
+    } else if (aiMode === 'gemini') {
+      if (geminiKey) headers['X-Gemini-API-Key'] = geminiKey;
+    } else {
+      // auto: send both, backend picks DeepSeek first
+      if (config.deepseekApiKey) headers['X-DeepSeek-API-Key'] = config.deepseekApiKey;
+      if (geminiKey) headers['X-Gemini-API-Key'] = geminiKey;
+    }
+    return headers;
+  }
 
   function getActiveKey() {
-    if (config.provider === 'gemini') {
-      return config.geminiApiKey || config.apiKey;
-    } else {
-      return config.deepseekApiKey || config.apiKey;
-    }
+    const hasDeepSeek = !!config.deepseekApiKey;
+    const hasGemini   = !!(config.geminiApiKey || config.apiKey);
+    return hasDeepSeek || hasGemini;
   }
 
   // Load config
@@ -83,9 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
       systemPrompt: ''
     }, (items) => {
       config = items;
-      if (!getActiveKey()) {
-        alert('Please configure your API Key in the Settings page before processing.');
-      }
+      updateAiBadge();
     });
   }
   loadConfig();
@@ -222,7 +279,8 @@ document.addEventListener('DOMContentLoaded', () => {
         linkText: link.linkText,
         status: 'pending', // pending, active, completed, failed
         error: '',
-        summary: ''
+        summary: '',
+        modelUsed: ''
       };
     });
 
@@ -240,6 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <span class="queue-item-url" title="${item.url}">${item.name}</span>
           <span class="status-badge status-pending" id="badge-${item.id}">Pending</span>
         </div>
+        <div class="queue-item-meta" id="meta-${item.id}" style="font-size: 10px; color: var(--text-muted); display: none; margin-top: 4px;"></div>
       `;
       queueList.appendChild(itemEl);
     });
@@ -269,6 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             linkTextLower.includes('amdt') || linkTextLower.includes('amendment');
         
         let summary = '';
+        let modelUsed = '';
         
         if (isAmendment) {
           updateQueueItemStatus(item.id, 'active', 'Uploading to backend...');
@@ -277,10 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const formData = new FormData();
           formData.append("file", new Blob([arrayBuffer]), "document.pdf");
           
-          const headers = {};
-          const geminiKey = config.geminiApiKey || (config.provider === 'gemini' ? config.apiKey : '');
-          if (geminiKey) headers['X-Gemini-API-Key'] = geminiKey;
-          if (config.deepseekApiKey) headers['X-DeepSeek-API-Key'] = config.deepseekApiKey;
+          const headers = buildApiHeaders();
 
           const res = await fetch(`${backendUrl}/analyze`, {
             method: 'POST',
@@ -296,6 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
           
           const data = await res.json();
           summary = data.analysis;
+          modelUsed = data.model_used;
         } else {
           // 2. Parse PDF (local JS for SUP/AIC)
           updateQueueItemStatus(item.id, 'active', 'Parsing PDF...');
@@ -321,11 +379,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const backendUrl = config.backendUrl || 'http://localhost:8000';
           const modelName = config.model === 'custom' ? config.customModel : config.model;
 
-          const supHeaders = { 'Content-Type': 'application/json' };
-          // Always send both keys — backend picks DeepSeek first if present, then Gemini
-          if (config.deepseekApiKey) supHeaders['X-DeepSeek-API-Key'] = config.deepseekApiKey;
-          const geminiKeyForSup = config.geminiApiKey || config.apiKey;
-          if (geminiKeyForSup) supHeaders['X-Gemini-API-Key'] = geminiKeyForSup;
+          const supHeaders = { 'Content-Type': 'application/json', ...buildApiHeaders() };
 
           const supRes = await fetch(`${backendUrl}/analyze-sup`, {
             method: 'POST',
@@ -345,14 +399,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
           const supData = await supRes.json();
           summary = supData.summary;
+          modelUsed = supData.model_used;
         }
         
         item.summary = summary;
+        item.modelUsed = modelUsed;
         summariesResults.push({ url: item.url, name: item.name, summaryText: summary });
-        updateQueueItemStatus(item.id, 'completed', 'Completed');
+        updateQueueItemStatus(item.id, 'completed', 'Completed', modelUsed);
 
         // Append to main view
-        appendSummaryCard(item.url, item.name, summary);
+        appendSummaryCard(item.url, item.name, summary, modelUsed);
 
       } catch (err) {
         console.error(err);
@@ -408,15 +464,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function updateQueueItemStatus(id, status, text) {
+  function updateQueueItemStatus(id, status, text, modelUsed) {
     const badge = document.getElementById(`badge-${id}`);
     if (badge) {
       badge.className = `status-badge status-${status}`;
       badge.textContent = text;
     }
+    if (modelUsed) {
+      const meta = document.getElementById(`meta-${id}`);
+      if (meta) {
+        meta.textContent = `Resolved via: ${modelUsed}`;
+        meta.style.display = 'block';
+      }
+    }
   }
 
-  function appendSummaryCard(url, name, summaryMarkdown) {
+  function appendSummaryCard(url, name, summaryMarkdown, modelUsed) {
     const card = document.createElement('div');
     card.className = 'summary-card';
     
@@ -425,7 +488,8 @@ document.addEventListener('DOMContentLoaded', () => {
     card.innerHTML = `
       <div class="summary-card-header">
         <div class="summary-card-title">${name}</div>
-        <div class="card-actions">
+        <div class="card-actions" style="display: flex; align-items: center; gap: 8px;">
+          ${modelUsed ? `<span style="font-size: 11px; color: var(--text-muted); background: var(--border-color); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-color);">${modelUsed}</span>` : ''}
           <button class="btn-secondary copy-btn" style="padding: 4px 10px; font-size: 11px;">Copy</button>
           <a href="${url}" target="_blank" class="btn-secondary" style="padding: 4px 10px; font-size: 11px; text-decoration: none;">Open PDF</a>
         </div>
