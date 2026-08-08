@@ -483,6 +483,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function filterAipLinks(pageUrl, links) {
+    // Only process http/https links (ignore javascript:, mailto:, and other schemes)
+    links = links.filter(link => link.url && (link.url.toLowerCase().startsWith('http://') || link.url.toLowerCase().startsWith('https://')));
+
     const isHkAis = pageUrl.toLowerCase().includes('ais.gov.hk');
     let filtered = [];
 
