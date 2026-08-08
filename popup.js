@@ -137,7 +137,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       const hasDeepSeek = !!config.deepseekApiKey;
       const hasGemini   = !!(config.geminiApiKey || config.apiKey);
       if (hasDeepSeek || hasGemini) {
-        summarizeBtn.disabled = false;
+        const isPdf = currentTabUrl.toLowerCase().endsWith('.pdf') || 
+                      currentTabUrl.toLowerCase().includes('/pdf/') ||
+                      currentTabUrl.toLowerCase().includes('pdf') ||
+                      (tab && tab.title.toLowerCase().endsWith('.pdf'));
+        if (isPdf) {
+          summarizeBtn.disabled = false;
+          summarizeBtn.style.display = 'block';
+        } else {
+          summarizeBtn.disabled = true;
+          summarizeBtn.style.display = 'none';
+        }
         clearError();
       } else {
         showError('Please set your API Key in the Settings page first.');
@@ -368,22 +378,45 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
   function scanPageForLinks() {
-    const anchors = Array.from(document.querySelectorAll('a[href]'));
-    const links = anchors.map(a => {
-      let absoluteUrl = '';
+    const allLinks = [];
+    
+    const getDocLinks = (doc) => {
       try {
-        absoluteUrl = new URL(a.getAttribute('href'), document.baseURI).href;
-      } catch(e) {
-        absoluteUrl = a.href;
+        const anchors = Array.from(doc.querySelectorAll('a[href]'));
+        return anchors.map(a => {
+          let absoluteUrl = '';
+          try {
+            absoluteUrl = new URL(a.getAttribute('href'), doc.baseURI).href;
+          } catch(e) {
+            absoluteUrl = a.href;
+          }
+          return {
+            url: absoluteUrl.replace(/\\/g, '/'),
+            text: a.textContent.trim()
+          };
+        });
+      } catch (e) {
+        return [];
       }
-      return {
-        url: absoluteUrl.replace(/\\/g, '/'),
-        text: a.textContent.trim()
-      };
-    });
+    };
+
+    allLinks.push(...getDocLinks(document));
+    
+    // Scan sub-frames if same-origin permits (e.g. eAIP framesets)
+    if (window.frames && window.frames.length > 0) {
+      for (let i = 0; i < window.frames.length; i++) {
+        try {
+          const frameDoc = window.frames[i].document;
+          if (frameDoc) {
+            allLinks.push(...getDocLinks(frameDoc));
+          }
+        } catch (e) {}
+      }
+    }
+    
     return {
       url: window.location.href,
-      links: links
+      links: allLinks
     };
   }
 
@@ -391,7 +424,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const res = await fetch(htmlUrl);
       if (!res.ok) return htmlUrl;
-      const htmlText = await res.text();
+      let htmlText = await res.text();
+      let contextUrl = htmlUrl;
+
+      // Check if it's a frameset page and recursively load the cover frame content
+      const frameRegex = /<frame[^>]+src=["']([^"']*(?:cover|index|menu)[^"']*)["']/i;
+      const frameMatch = frameRegex.exec(htmlText) || /<frame[^>]+src=["']([^"']+)["']/i.exec(htmlText);
+      if (frameMatch) {
+        const coverUrl = new URL(frameMatch[1], htmlUrl).href;
+        const coverRes = await fetch(coverUrl);
+        if (coverRes.ok) {
+          htmlText = await coverRes.text();
+          contextUrl = coverUrl;
+        }
+      }
       
       // Parse links from HTML text
       const pdfRegex = /href=["']([^"']+\.pdf(?:[^"']*)?)["']/gi;
@@ -399,7 +445,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const pdfUrls = [];
       while ((match = pdfRegex.exec(htmlText)) !== null) {
         try {
-          const absolute = new URL(match[1], htmlUrl).href;
+          const absolute = new URL(match[1], contextUrl).href;
           pdfUrls.push(absolute);
         } catch (e) {}
       }
@@ -429,7 +475,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const text = link.text.toLowerCase();
         
         // Match standard HK CAD list item text headers (AIP AMDT, AIP SUP, AIC)
-        const isAipDoc = text.includes('aip amdt') || text.includes('aip sup') || text.includes('aic');
+        // Also support "Complete Amendment", "Amendment" and "PDF Version" keywords
+        const isAipDoc = text.includes('aip amdt') || text.includes('aip sup') || text.includes('aic') || 
+                         text.includes('complete amendment') || text.includes('amendment');
         return isAipDoc;
       });
     }
