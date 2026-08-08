@@ -427,17 +427,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Tier 2: HK CAD specific adapter (looks for Latest Publications list items)
       filtered = links.filter(link => {
         const text = link.text.toLowerCase();
-        const url = link.url.toLowerCase();
         
         // Match standard HK CAD list item text headers (AIP AMDT, AIP SUP, AIC)
         const isAipDoc = text.includes('aip amdt') || text.includes('aip sup') || text.includes('aic');
-        if (!isAipDoc) return false;
-        
-        // Match PDF links OR HTML eAIP folder links (which contain hkaip, eaip, amdt, history, or index)
-        const isPdf = url.endsWith('.pdf') || url.includes('/pdf/') || url.includes('.pdf?') || url.includes('/pdfurl/');
-        const isHtmlEaip = url.includes('/eaip/') || url.includes('/hkaip/') || url.includes('amdt') || url.includes('history') || url.includes('index') || url.endsWith('.html') || url.endsWith('/');
-        
-        return isPdf || isHtmlEaip;
+        return isAipDoc;
       });
     }
 
@@ -452,7 +445,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (seenUrls.has(link.url)) return false;
 
         const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('/pdf/') || lowerUrl.includes('.pdf?') || lowerUrl.includes('/pdfurl/');
-        const isHtmlEaip = (lowerUrl.includes('/eaip/') || lowerUrl.includes('/hkaip/') || lowerUrl.includes('/amdt/')) && 
+        const isHtmlEaip = (lowerUrl.includes('eaip') || lowerUrl.includes('hkaip') || lowerUrl.includes('amdt')) && 
                            (lowerUrl.endsWith('.html') || lowerUrl.endsWith('/') || lowerUrl.includes('history') || lowerUrl.includes('index'));
         if (!isPdf && !isHtmlEaip) return false;
 
