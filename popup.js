@@ -204,24 +204,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!isPdf) {
       urlDisplay.textContent = "Scanning page for documents...";
       
-      // Inject content script to scan DOM
+      // Inject content script to scan DOM in all frames
       chrome.scripting.executeScript({
-        target: { tabId: tab.id },
+        target: { tabId: tab.id, allFrames: true },
         func: scanPageForLinks
       }, (results) => {
-        if (chrome.runtime.lastError || !results || !results[0]) {
+        if (chrome.runtime.lastError || !results || results.length === 0) {
           console.error("Failed to inject script: ", chrome.runtime.lastError);
           urlDisplay.textContent = `${currentTabUrl} (Not detected as PDF)`;
           urlDisplay.style.borderColor = 'rgba(239, 68, 68, 0.4)';
           return;
         }
 
-        const { url, links, selfPdf } = results[0].result;
-        
-        if (selfPdf) {
-          // If the page itself is a direct HTML document representing a PDF alternate,
+        let aggregatedLinks = [];
+        let detectedSelfPdf = null;
+        let mainFrameUrl = currentTabUrl;
+
+        results.forEach(resObj => {
+          if (resObj && resObj.result) {
+            const { url, links, selfPdf } = resObj.result;
+            if (links && links.length > 0) {
+              aggregatedLinks.push(...links);
+            }
+            if (selfPdf) {
+              detectedSelfPdf = selfPdf;
+            }
+            if (resObj.frameId === 0) {
+              mainFrameUrl = url;
+            }
+          }
+        });
+
+        if (detectedSelfPdf) {
+          // If any frame itself is a direct HTML document representing a PDF alternate,
           // redirect currentTabUrl to selfPdf and switch to direct summarization mode.
-          currentTabUrl = selfPdf;
+          currentTabUrl = detectedSelfPdf;
           urlDisplay.textContent = `eAIP Document: ${tab.title || 'Supplement/AIC'}`;
           urlDisplay.style.borderColor = 'rgba(16, 185, 129, 0.4)'; // green
           summarizeBtn.style.display = 'block';
@@ -231,7 +248,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           return;
         }
 
-        const filteredLinks = filterAipLinks(url, links);
+        const filteredLinks = filterAipLinks(mainFrameUrl, aggregatedLinks);
 
         if (filteredLinks.length === 0) {
           urlDisplay.textContent = `${currentTabUrl} (No publications detected)`;
@@ -258,7 +275,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
           }
 
-          urlDisplay.textContent = `AIP Page: ${new URL(url).hostname}`;
+          urlDisplay.textContent = `AIP Page: ${new URL(mainFrameUrl).hostname}`;
           urlDisplay.style.borderColor = 'rgba(16, 185, 129, 0.4)'; // green border
           renderExtractedLinks(validPdfLinks);
         });
@@ -390,61 +407,43 @@ document.addEventListener('DOMContentLoaded', async () => {
   function scanPageForLinks() {
     const allLinks = [];
     
-    const getDocLinks = (doc) => {
-      try {
-        const anchors = Array.from(doc.querySelectorAll('a[href]'));
-        return anchors.map(a => {
-          let absoluteUrl = '';
-          try {
-            absoluteUrl = new URL(a.getAttribute('href'), doc.baseURI).href;
-          } catch(e) {
-            absoluteUrl = a.href;
-          }
-          
-          let text = a.textContent.trim();
-          
-          // Contextual table row scanner: if text is short (e.g. just a date like "06 AUG 2026")
-          // and the anchor is inside a table row, find other text cells to build a description.
-          if (text.length > 0 && text.length < 18 && a.closest('tr')) {
-            try {
-              const tr = a.closest('tr');
-              const cells = Array.from(tr.querySelectorAll('td'));
-              const cellTexts = cells.map(td => td.textContent.trim()).filter(t => t && t !== text);
-              // Find a cell containing standard publication keywords
-              const desc = cellTexts.find(t => {
-                const lower = t.toLowerCase();
-                return lower.includes('amdt') || lower.includes('aip') || lower.includes('sup') || lower.includes('aic') || lower.includes('airac') || lower.includes('amendment') || lower.includes('supplement');
-              });
-              if (desc) {
-                const cleanDesc = desc.replace(/\s+/g, ' ').substring(0, 60);
-                text = `${text} (${cleanDesc})`;
-              }
-            } catch (trErr) {}
-          }
-          
-          return {
-            url: absoluteUrl.replace(/\\/g, '/'),
-            text: text
-          };
-        });
-      } catch (e) {
-        return [];
-      }
-    };
-
-    allLinks.push(...getDocLinks(document));
-    
-    // Scan sub-frames if same-origin permits (e.g. eAIP framesets)
-    if (window.frames && window.frames.length > 0) {
-      for (let i = 0; i < window.frames.length; i++) {
+    try {
+      const anchors = Array.from(document.querySelectorAll('a[href]'));
+      anchors.forEach(a => {
+        let absoluteUrl = '';
         try {
-          const frameDoc = window.frames[i].document;
-          if (frameDoc) {
-            allLinks.push(...getDocLinks(frameDoc));
-          }
-        } catch (e) {}
-      }
-    }
+          absoluteUrl = new URL(a.getAttribute('href'), document.baseURI).href;
+        } catch(e) {
+          absoluteUrl = a.href;
+        }
+        
+        let text = a.textContent.trim();
+        
+        // Contextual table row scanner: if text is short (e.g. just a date like "06 AUG 2026")
+        // and the anchor is inside a table row, find other text cells to build a description.
+        if (text.length > 0 && text.length < 18 && a.closest('tr')) {
+          try {
+            const tr = a.closest('tr');
+            const cells = Array.from(tr.querySelectorAll('td'));
+            const cellTexts = cells.map(td => td.textContent.trim()).filter(t => t && t !== text);
+            // Find a cell containing standard publication keywords
+            const desc = cellTexts.find(t => {
+              const lower = t.toLowerCase();
+              return lower.includes('amdt') || lower.includes('aip') || lower.includes('sup') || lower.includes('aic') || lower.includes('airac') || lower.includes('amendment') || lower.includes('supplement');
+            });
+            if (desc) {
+              const cleanDesc = desc.replace(/\s+/g, ' ').substring(0, 60);
+              text = `${text} (${cleanDesc})`;
+            }
+          } catch (trErr) {}
+        }
+        
+        allLinks.push({
+          url: absoluteUrl.replace(/\\/g, '/'),
+          text: text
+        });
+      });
+    } catch (e) {}
     
     // Check if the current page itself has a print alternate PDF link in its head
     let selfPdf = null;
@@ -455,21 +454,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     } catch(e) {}
     
-    if (!selfPdf && window.frames && window.frames.length > 0) {
-      for (let i = 0; i < window.frames.length; i++) {
-        try {
-          const frameDoc = window.frames[i].document;
-          if (frameDoc) {
-            const linkEl = frameDoc.querySelector('link[rel="alternate"][type="application/pdf"]');
-            if (linkEl && linkEl.getAttribute('href')) {
-              selfPdf = new URL(linkEl.getAttribute('href'), frameDoc.baseURI).href.replace(/\\/g, '/');
-              break;
-            }
-          }
-        } catch(e) {}
-      }
-    }
-    
     return {
       url: window.location.href,
       links: allLinks,
@@ -477,32 +461,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
   }
 
+  function extractPrintPdfFromHtmlText(htmlText, baseUrl) {
+    const linkTags = htmlText.match(/<link[^>]+>/gi) || [];
+    for (const tag of linkTags) {
+      const lowerTag = tag.toLowerCase();
+      if (lowerTag.includes('type="application/pdf"') || lowerTag.includes("type='application/pdf'") ||
+          (lowerTag.includes('rel="alternate"') && lowerTag.includes('.pdf'))) {
+        const hrefMatch = /href=["']([^"']+)["']/i.exec(tag);
+        if (hrefMatch) {
+          return new URL(hrefMatch[1], baseUrl).href.replace(/\\/g, '/');
+        }
+      }
+    }
+    
+    // Fallback: search for any PDF link inside the HTML text
+    const pdfRegex = /href=["']([^"']+\.pdf(?:[^"']*)?)["']/gi;
+    let pdfMatch = pdfRegex.exec(htmlText);
+    if (pdfMatch) {
+      return new URL(pdfMatch[1], baseUrl).href.replace(/\\/g, '/');
+    }
+    return null;
+  }
+
   async function resolvePrintPdfFromHtml(htmlUrl) {
     try {
       const res = await fetch(htmlUrl);
       if (!res.ok) return null;
       const text = await res.text();
-      
-      const linkTags = text.match(/<link[^>]+>/gi) || [];
-      for (const tag of linkTags) {
-        const lowerTag = tag.toLowerCase();
-        if (lowerTag.includes('type="application/pdf"') || lowerTag.includes("type='application/pdf'") ||
-            (lowerTag.includes('rel="alternate"') && lowerTag.includes('.pdf'))) {
-          const hrefMatch = /href=["']([^"']+)["']/i.exec(tag);
-          if (hrefMatch) {
-            return new URL(hrefMatch[1], htmlUrl).href.replace(/\\/g, '/');
-          }
-        }
-      }
-      
-      // Fallback: search for any PDF link inside the HTML text
-      const pdfRegex = /href=["']([^"']+\.pdf(?:[^"']*)?)["']/gi;
-      let pdfMatch = pdfRegex.exec(text);
-      if (pdfMatch) {
-        return new URL(pdfMatch[1], htmlUrl).href.replace(/\\/g, '/');
-      }
-      
-      return null;
+      return extractPrintPdfFromHtmlText(text, htmlUrl);
     } catch(e) {
       console.error("Failed to resolve print PDF from HTML:", htmlUrl, e);
       return null;
@@ -522,6 +508,34 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!res.ok) return [link];
       let htmlText = await res.text();
       let contextUrl = link.url;
+
+      // Check if this page itself has an alternate print PDF (standalone document)
+      const selfPrintPdf = extractPrintPdfFromHtmlText(htmlText, link.url);
+      if (selfPrintPdf) {
+        let docType = 'AMDT';
+        const itemLowerUrl = selfPrintPdf.toLowerCase();
+        const itemLowerText = link.text.toLowerCase();
+        if (itemLowerUrl.includes('sup') || itemLowerUrl.includes('supplement') || itemLowerText.includes('sup') || itemLowerText.includes('supplement')) {
+          docType = 'SUP';
+        } else if (itemLowerUrl.includes('aic') || itemLowerUrl.includes('circular') || itemLowerText.includes('aic') || itemLowerText.includes('circular')) {
+          docType = 'AIC';
+        }
+
+        // If the text is short or not descriptive, extract the title of the HTML page
+        let text = link.text;
+        if (text.length < 15 || text.toLowerCase().includes('click') || text.includes('..')) {
+          const titleMatch = /<title>([\s\S]*?)<\/title>/i.exec(htmlText);
+          if (titleMatch && titleMatch[1]) {
+            text = titleMatch[1].trim().replace(/\s+/g, ' ');
+          }
+        }
+
+        return [{
+          url: selfPrintPdf,
+          text: text,
+          docType: docType
+        }];
+      }
 
       // Extract all frame src attributes
       const frameRegex = /<frame[^>]+src=["']([^"']+)["']/gi;
