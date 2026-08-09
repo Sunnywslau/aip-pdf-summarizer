@@ -82,6 +82,19 @@ The gateway validates model names sent by the extension. If a model name is mism
 
 ---
 
+## 🔍 Declarative Link Extractor & PDF Resolver
+
+The extension uses a configuration-driven link extraction engine to scan AIP pages, extract document tables/lists, and resolve them to their corresponding print PDFs.
+
+- **Modular Scraper Engine**: [`aipExtractor.js`](file:///Users/wsl/Code/AIP_Reader/aip-pdf-summarizer/aipExtractor.js) contains the core matching, filtering, and resolution strategies.
+- **Config-Driven**: Add support for a new country by simply adding its matching rules and keywords to `AIP_CONFIGS` in `aipExtractor.js`.
+- **All-Frames Injection**: DOM scanning runs inside all active page frames concurrently using Chrome's `allFrames: true` scripting injection API, bypassing cross-frame same-origin security barriers.
+- **Print Alternate Resolving**: Automatically fetches and parses target subpages to extract print PDF references and automatically pulls in the descriptive subpage title (e.g. `SUP 23/26 PHUKET AIRPORT...`) if the link text on the index page was short or generic.
+
+For detailed design specifications and extension guidelines, see [`docs/design/architecture.md`](file:///Users/wsl/Code/AIP_Reader/aip-pdf-summarizer/docs/design/architecture.md).
+
+---
+
 ## 📂 Repository Structure
 
 ```
@@ -89,8 +102,13 @@ aip-pdf-summarizer/
 │
 ├── manifest.json          # Chrome Extension manifest
 ├── popup.html / popup.js  # Main UI with AI Mode selector
+├── aipExtractor.js        # Declarative Config-Driven Extraper Module
 ├── batch.html / batch.js  # Batch URL runner
 ├── options.html / options.js  # Dual-key settings page
+│
+├── docs/
+│   └── design/
+│       └── architecture.md # Detailed technical architecture & design spec
 │
 ├── backend/               # FastAPI Gateway (Docker)
 │   ├── fastapi_app.py     # Endpoints (/analyze, /analyze-sup)
