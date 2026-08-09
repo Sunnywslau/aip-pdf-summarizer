@@ -567,47 +567,74 @@ document.addEventListener('DOMContentLoaded', async () => {
   const extractedLinksList = document.getElementById('extractedLinksList');
   const aiSelectorGroup = document.getElementById('aiSelectorGroup');
   const importSelectedBtn = document.getElementById('importSelectedBtn');
-  let selectedLinks = [];
+  const toggleAllLinks = document.getElementById('toggleAllLinks');
+  const linkCount = document.getElementById('linkCount');
+  
+  let extractedLinks = [];
+
+  function updateImportButtonState() {
+    const checkedCbs = extractedLinksList.querySelectorAll('.link-checkbox:checked');
+    importSelectedBtn.disabled = checkedCbs.length === 0;
+    if (checkedCbs.length === 0) {
+      toggleAllLinks.textContent = 'Select All';
+    } else {
+      toggleAllLinks.textContent = 'Deselect All';
+    }
+  }
 
   function renderExtractedLinks(links) {
+    extractedLinks = links;
     extractedLinksList.innerHTML = '';
-    selectedLinks = [...links]; // Default select all
+    linkCount.textContent = links.length;
+    
+    // Default checked policy: if there are more than 3 links (e.g. archives),
+    // default to only selecting the latest one (index 0). Otherwise, select all.
+    const shouldSelectAllByDefault = links.length <= 3;
     
     links.forEach((link, idx) => {
       const itemEl = document.createElement('div');
       itemEl.className = 'extractor-link-item';
       const checkboxId = `chk-link-${idx}`;
+      const isChecked = shouldSelectAllByDefault || (idx === 0);
       
       itemEl.innerHTML = `
-        <input type="checkbox" id="${checkboxId}" checked style="cursor: pointer;">
+        <input type="checkbox" id="${checkboxId}" class="link-checkbox" data-index="${idx}" ${isChecked ? 'checked' : ''} style="cursor: pointer;">
         <div style="flex: 1; cursor: pointer;">
           <label for="${checkboxId}" class="extractor-link-label" style="cursor: pointer;">${link.text || 'Untitled Document'}</label>
           <span class="extractor-link-url" title="${link.url}">${link.url}</span>
         </div>
       `;
       
-      itemEl.querySelector('input').addEventListener('change', (e) => {
-        if (e.target.checked) {
-          if (!selectedLinks.some(l => l.url === link.url)) {
-            selectedLinks.push(link);
-          }
-        } else {
-          selectedLinks = selectedLinks.filter(l => l.url !== link.url);
-        }
-        importSelectedBtn.disabled = selectedLinks.length === 0;
-      });
-      
+      itemEl.querySelector('input').addEventListener('change', updateImportButtonState);
       extractedLinksList.appendChild(itemEl);
     });
 
+    updateImportButtonState();
     extractorPanel.style.display = 'block';
     summarizeBtn.style.display = 'none';
   }
 
+  toggleAllLinks.addEventListener('click', (e) => {
+    e.preventDefault();
+    const shouldCheck = toggleAllLinks.textContent === 'Select All';
+    const checkboxes = extractedLinksList.querySelectorAll('.link-checkbox');
+    checkboxes.forEach(cb => {
+      cb.checked = shouldCheck;
+    });
+    updateImportButtonState();
+  });
+
   importSelectedBtn.addEventListener('click', () => {
-    if (selectedLinks.length === 0) return;
+    const checkedCbs = Array.from(extractedLinksList.querySelectorAll('.link-checkbox:checked'));
+    const selected = checkedCbs.map(cb => {
+      const idx = parseInt(cb.getAttribute('data-index'), 10);
+      return extractedLinks[idx];
+    });
+
+    if (selected.length === 0) return;
+    
     chrome.storage.local.set({
-      importQueue: selectedLinks
+      importQueue: selected
     }, () => {
       chrome.tabs.create({ url: 'batch.html' });
     });

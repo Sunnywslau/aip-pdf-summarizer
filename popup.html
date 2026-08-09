@@ -337,7 +337,10 @@
       </svg>
       AIP Portal Detected
     </h3>
-    <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">Select the publications to analyze in Batch Workspace:</p>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 11px;">
+      <span style="color: var(--text-muted);">Publications found: <strong id="linkCount">0</strong></span>
+      <a href="#" id="toggleAllLinks" style="color: var(--primary-color); text-decoration: none; font-weight: 500;">Select All</a>
+    </div>
     <div id="extractedLinksList" style="max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; padding-right: 4px;">
       <!-- Dynamically populated checklist -->
     </div>
