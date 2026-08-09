@@ -438,6 +438,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
   }
 
+  async function resolvePrintPdfFromHtml(htmlUrl) {
+    try {
+      const res = await fetch(htmlUrl);
+      if (!res.ok) return null;
+      const text = await res.text();
+      
+      const linkTags = text.match(/<link[^>]+>/gi) || [];
+      for (const tag of linkTags) {
+        const lowerTag = tag.toLowerCase();
+        if (lowerTag.includes('type="application/pdf"') || lowerTag.includes("type='application/pdf'") ||
+            (lowerTag.includes('rel="alternate"') && lowerTag.includes('.pdf'))) {
+          const hrefMatch = /href=["']([^"']+)["']/i.exec(tag);
+          if (hrefMatch) {
+            return new URL(hrefMatch[1], htmlUrl).href.replace(/\\/g, '/');
+          }
+        }
+      }
+      
+      // Fallback: search for any PDF link inside the HTML text
+      const pdfRegex = /href=["']([^"']+\.pdf(?:[^"']*)?)["']/gi;
+      let pdfMatch = pdfRegex.exec(text);
+      if (pdfMatch) {
+        return new URL(pdfMatch[1], htmlUrl).href.replace(/\\/g, '/');
+      }
+      
+      return null;
+    } catch(e) {
+      console.error("Failed to resolve print PDF from HTML:", htmlUrl, e);
+      return null;
+    }
+  }
+
   async function resolveAipHtmlToPdfLinks(link) {
     const lowerUrl = link.url.toLowerCase();
     const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('/pdf/') || lowerUrl.includes('.pdf?') || lowerUrl.includes('/pdfurl/');
@@ -483,12 +515,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         const linkText = aMatch[2].replace(/<[^>]*>/g, '').trim().replace(/\s+/g, ' ');
         const lowerHref = href.toLowerCase();
         
-        if (lowerHref.endsWith('.pdf') || lowerHref.includes('/pdf/') || lowerHref.includes('.pdf?') || lowerHref.includes('/pdfurl/')) {
+        const isPdfUrl = lowerHref.endsWith('.pdf') || lowerHref.includes('/pdf/') || lowerHref.includes('.pdf?') || lowerHref.includes('/pdfurl/');
+        const isHtmlUrl = !isPdfUrl && 
+                          (lowerHref.endsWith('.html') || lowerHref.includes('/html/') || lowerHref.includes('/esup/') || lowerHref.includes('/eaic/')) &&
+                          (lowerHref.includes('sup') || lowerHref.includes('aic') || lowerHref.includes('amdt') || lowerHref.includes('supplement') ||
+                           linkText.toLowerCase().includes('sup') || linkText.toLowerCase().includes('aic') || linkText.toLowerCase().includes('amdt') || linkText.toLowerCase().includes('supplement'));
+
+        if (isPdfUrl || isHtmlUrl) {
           try {
             const absolute = new URL(href, contextUrl).href;
             pdfLinks.push({
               url: absolute.replace(/\\/g, '/'),
-              text: linkText
+              text: linkText,
+              isHtml: isHtmlUrl
             });
           } catch (e) {}
         }
@@ -496,9 +535,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       if (pdfLinks.length === 0) return [];
       
-      const resolved = [];
-      pdfLinks.forEach(item => {
-        const itemLowerUrl = item.url.toLowerCase();
+      const resolvedPromises = pdfLinks.map(async (item) => {
+        let finalUrl = item.url;
+        if (item.isHtml) {
+          const printPdf = await resolvePrintPdfFromHtml(item.url);
+          if (!printPdf) return null;
+          finalUrl = printPdf;
+        }
+
+        const itemLowerUrl = finalUrl.toLowerCase();
         const itemLowerText = item.text.toLowerCase();
         
         const isAmdt = itemLowerUrl.includes('amdt') || itemLowerUrl.includes('amendment') || itemLowerText.includes('amdt') || itemLowerText.includes('amendment');
@@ -512,25 +557,31 @@ document.addEventListener('DOMContentLoaded', async () => {
           
           let cleanText = link.text;
           if (item.text) {
-            // Append target document description
             cleanText = `${cleanText} - ${item.text}`;
           } else {
             cleanText = `${cleanText} - ${docType}`;
           }
           
-          resolved.push({
-            url: item.url,
+          return {
+            url: finalUrl,
             text: cleanText
-          });
+          };
         }
+        return null;
       });
+      
+      const resolved = (await Promise.all(resolvedPromises)).filter(Boolean);
       
       // If we filtered out all but still have PDF links (fallback), return the first one
       if (resolved.length === 0 && pdfLinks.length > 0) {
-        return [{
-          url: pdfLinks[0].url,
-          text: `${link.text} - PDF`
-        }];
+        // Find the first non-HTML link or first resolved PDF
+        const firstPdf = pdfLinks.find(p => !p.isHtml);
+        if (firstPdf) {
+          return [{
+            url: firstPdf.url,
+            text: `${link.text} - PDF`
+          }];
+        }
       }
       
       return resolved;
