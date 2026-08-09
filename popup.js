@@ -397,9 +397,31 @@ document.addEventListener('DOMContentLoaded', async () => {
           } catch(e) {
             absoluteUrl = a.href;
           }
+          
+          let text = a.textContent.trim();
+          
+          // Contextual table row scanner: if text is short (e.g. just a date like "06 AUG 2026")
+          // and the anchor is inside a table row, find other text cells to build a description.
+          if (text.length > 0 && text.length < 18 && a.closest('tr')) {
+            try {
+              const tr = a.closest('tr');
+              const cells = Array.from(tr.querySelectorAll('td'));
+              const cellTexts = cells.map(td => td.textContent.trim()).filter(t => t && t !== text);
+              // Find a cell containing standard publication keywords
+              const desc = cellTexts.find(t => {
+                const lower = t.toLowerCase();
+                return lower.includes('amdt') || lower.includes('aip') || lower.includes('sup') || lower.includes('aic') || lower.includes('airac') || lower.includes('amendment') || lower.includes('supplement');
+              });
+              if (desc) {
+                const cleanDesc = desc.replace(/\s+/g, ' ').substring(0, 60);
+                text = `${text} (${cleanDesc})`;
+              }
+            } catch (trErr) {}
+          }
+          
           return {
             url: absoluteUrl.replace(/\\/g, '/'),
-            text: a.textContent.trim()
+            text: text
           };
         });
       } catch (e) {
@@ -523,11 +545,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (seenUrls.has(link.url)) return false;
 
         const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('/pdf/') || lowerUrl.includes('.pdf?') || lowerUrl.includes('/pdfurl/');
-        const isHtmlEaip = (lowerUrl.includes('eaip') || lowerUrl.includes('hkaip') || lowerUrl.includes('amdt')) && 
+        const isHtmlEaip = (lowerUrl.includes('eaip') || lowerUrl.includes('hkaip') || lowerUrl.includes('aip') || lowerUrl.includes('airac') || lowerUrl.includes('amdt')) && 
                            (lowerUrl.endsWith('.html') || lowerUrl.endsWith('/') || lowerUrl.includes('history') || lowerUrl.includes('index'));
         if (!isPdf && !isHtmlEaip) return false;
 
-        const keywords = ['sup', 'aic', 'amdt', 'amendment', 'pdf', 'aip', 'circular', 'supplement'];
+        const keywords = ['sup', 'aic', 'amdt', 'amendment', 'pdf', 'aip', 'circular', 'supplement', 'airac'];
         const matchesKeyword = keywords.some(kw => lowerUrl.includes(kw) || lowerText.includes(kw));
 
         if (matchesKeyword) {
