@@ -216,7 +216,21 @@ document.addEventListener('DOMContentLoaded', async () => {
           return;
         }
 
-        const { url, links } = results[0].result;
+        const { url, links, selfPdf } = results[0].result;
+        
+        if (selfPdf) {
+          // If the page itself is a direct HTML document representing a PDF alternate,
+          // redirect currentTabUrl to selfPdf and switch to direct summarization mode.
+          currentTabUrl = selfPdf;
+          urlDisplay.textContent = `eAIP Document: ${tab.title || 'Supplement/AIC'}`;
+          urlDisplay.style.borderColor = 'rgba(16, 185, 129, 0.4)'; // green
+          summarizeBtn.style.display = 'block';
+          extractorPanel.style.display = 'none';
+          tabLoaded = true;
+          updateButtonState();
+          return;
+        }
+
         const filteredLinks = filterAipLinks(url, links);
 
         if (filteredLinks.length === 0) {
@@ -432,9 +446,34 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
     
+    // Check if the current page itself has a print alternate PDF link in its head
+    let selfPdf = null;
+    try {
+      const linkEl = document.querySelector('link[rel="alternate"][type="application/pdf"]');
+      if (linkEl && linkEl.getAttribute('href')) {
+        selfPdf = new URL(linkEl.getAttribute('href'), document.baseURI).href.replace(/\\/g, '/');
+      }
+    } catch(e) {}
+    
+    if (!selfPdf && window.frames && window.frames.length > 0) {
+      for (let i = 0; i < window.frames.length; i++) {
+        try {
+          const frameDoc = window.frames[i].document;
+          if (frameDoc) {
+            const linkEl = frameDoc.querySelector('link[rel="alternate"][type="application/pdf"]');
+            if (linkEl && linkEl.getAttribute('href')) {
+              selfPdf = new URL(linkEl.getAttribute('href'), frameDoc.baseURI).href.replace(/\\/g, '/');
+              break;
+            }
+          }
+        } catch(e) {}
+      }
+    }
+    
     return {
       url: window.location.href,
-      links: allLinks
+      links: allLinks,
+      selfPdf: selfPdf
     };
   }
 
