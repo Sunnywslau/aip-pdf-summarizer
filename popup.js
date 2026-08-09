@@ -227,22 +227,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         urlDisplay.textContent = "Resolving document links...";
         
-        // Resolve HTML eAIP folder links to their PDF targets
-        const resolvePromises = filteredLinks.map(async (link) => {
-          const lowerUrl = link.url.toLowerCase();
-          const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('/pdf/') || lowerUrl.includes('.pdf?') || lowerUrl.includes('/pdfurl/');
-          
-          if (!isPdf) {
-            const resolvedUrl = await resolveAipAmdtPdf(link.url);
-            return {
-              ...link,
-              url: resolvedUrl
-            };
-          }
-          return link;
-        });
+        // Resolve HTML eAIP folder links to their PDF targets (which may yield multiple PDFs like AMDT and SUP)
+        const resolvePromises = filteredLinks.map(resolveAipHtmlToPdfLinks);
 
-        Promise.all(resolvePromises).then((resolvedLinks) => {
+        Promise.all(resolvePromises).then((resolvedLists) => {
+          const resolvedLinks = resolvedLists.flat();
           // Filter out links that failed to resolve to a PDF link (if they still end in .html)
           const validPdfLinks = resolvedLinks.filter(link => {
             const lower = link.url.toLowerCase();
@@ -449,12 +438,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
   }
 
-  async function resolveAipAmdtPdf(htmlUrl) {
+  async function resolveAipHtmlToPdfLinks(link) {
+    const lowerUrl = link.url.toLowerCase();
+    const isPdf = lowerUrl.endsWith('.pdf') || lowerUrl.includes('/pdf/') || lowerUrl.includes('.pdf?') || lowerUrl.includes('/pdfurl/');
+    
+    if (isPdf) {
+      return [link];
+    }
+    
     try {
-      const res = await fetch(htmlUrl);
-      if (!res.ok) return htmlUrl;
+      const res = await fetch(link.url);
+      if (!res.ok) return [link];
       let htmlText = await res.text();
-      let contextUrl = htmlUrl;
+      let contextUrl = link.url;
 
       // Extract all frame src attributes
       const frameRegex = /<frame[^>]+src=["']([^"']+)["']/gi;
@@ -470,7 +466,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Fallback to the last frame (often the main content frame)
         if (!coverSrc) coverSrc = frameSrcs[frameSrcs.length - 1];
 
-        const coverUrl = new URL(coverSrc, htmlUrl).href;
+        const coverUrl = new URL(coverSrc, link.url).href;
         const coverRes = await fetch(coverUrl);
         if (coverRes.ok) {
           htmlText = await coverRes.text();
@@ -478,29 +474,69 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }
       
-      // Parse links from HTML text
-      const pdfRegex = /href=["']([^"']+\.pdf(?:[^"']*)?)["']/gi;
-      let pdfMatch;
-      const pdfUrls = [];
-      while ((pdfMatch = pdfRegex.exec(htmlText)) !== null) {
-        try {
-          const absolute = new URL(pdfMatch[1], contextUrl).href;
-          pdfUrls.push(absolute);
-        } catch (e) {}
+      // Parse links and texts from HTML text
+      const anchorRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+      const pdfLinks = [];
+      let aMatch;
+      while ((aMatch = anchorRegex.exec(htmlText)) !== null) {
+        const href = aMatch[1];
+        const linkText = aMatch[2].replace(/<[^>]*>/g, '').trim().replace(/\s+/g, ' ');
+        const lowerHref = href.toLowerCase();
+        
+        if (lowerHref.endsWith('.pdf') || lowerHref.includes('/pdf/') || lowerHref.includes('.pdf?') || lowerHref.includes('/pdfurl/')) {
+          try {
+            const absolute = new URL(href, contextUrl).href;
+            pdfLinks.push({
+              url: absolute.replace(/\\/g, '/'),
+              text: linkText
+            });
+          } catch (e) {}
+        }
       }
       
-      if (pdfUrls.length === 0) return htmlUrl;
+      if (pdfLinks.length === 0) return [];
       
-      // Find the best match: prefer one that has "amdt", "complete", "pkg", or "eaip" in it
-      const bestMatch = pdfUrls.find(url => {
-        const lower = url.toLowerCase();
-        return lower.includes('amdt') || lower.includes('complete') || lower.includes('eaip');
+      const resolved = [];
+      pdfLinks.forEach(item => {
+        const itemLowerUrl = item.url.toLowerCase();
+        const itemLowerText = item.text.toLowerCase();
+        
+        const isAmdt = itemLowerUrl.includes('amdt') || itemLowerUrl.includes('amendment') || itemLowerText.includes('amdt') || itemLowerText.includes('amendment');
+        const isSup = itemLowerUrl.includes('sup') || itemLowerUrl.includes('supplement') || itemLowerText.includes('sup') || itemLowerText.includes('supplement');
+        const isAic = itemLowerUrl.includes('aic') || itemLowerUrl.includes('circular') || itemLowerText.includes('aic') || itemLowerText.includes('circular');
+        
+        if (isAmdt || isSup || isAic) {
+          let docType = 'AMDT';
+          if (isSup) docType = 'SUP';
+          if (isAic) docType = 'AIC';
+          
+          let cleanText = link.text;
+          if (item.text) {
+            // Append target document description
+            cleanText = `${cleanText} - ${item.text}`;
+          } else {
+            cleanText = `${cleanText} - ${docType}`;
+          }
+          
+          resolved.push({
+            url: item.url,
+            text: cleanText
+          });
+        }
       });
       
-      return bestMatch || pdfUrls[0];
+      // If we filtered out all but still have PDF links (fallback), return the first one
+      if (resolved.length === 0 && pdfLinks.length > 0) {
+        return [{
+          url: pdfLinks[0].url,
+          text: `${link.text} - PDF`
+        }];
+      }
+      
+      return resolved;
     } catch (err) {
-      console.error("Failed to resolve HTML eAIP link:", err);
-      return htmlUrl;
+      console.error("Failed to resolve HTML eAIP links:", err);
+      return [link];
     }
   }
 
